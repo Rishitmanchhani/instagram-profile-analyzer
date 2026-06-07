@@ -359,20 +359,51 @@ function Dashboard({ username, data: d, onReset }) {
                   </div>
                 </div>
               )}
-              {Object.keys(formatBreakdown).length > 0 && (
-                <div style={{ marginBottom: "1.25rem" }}>
-                  <p style={{ fontSize: 11, color: C.muted, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 10 }}>Format Breakdown</p>
-                  {Object.entries(formatBreakdown).map(([k,v],i) => (
-                    <div key={k} style={{ marginBottom: 10 }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
-                        <span style={{ fontSize: 13, fontWeight: 500 }}>{k}</span>
-                        <span style={{ fontSize: 13, fontWeight: 700, color: (fmtColors[i] || fmtColors[0])[0] }}>{v}%</span>
-                      </div>
-                      <GradientBar value={v} colors={fmtColors[i] || fmtColors[0]} />
-                    </div>
-                  ))}
-                </div>
-              )}
+              {(() => {
+  const total =
+    Object.values(formatBreakdown).reduce(
+      (sum, val) => sum + Number(val || 0),
+      0
+    );
+
+  return Object.entries(formatBreakdown).map(([k, v], i) => {
+    const percent =
+      total > 0
+        ? Math.round((Number(v) / total) * 100)
+        : 0;
+
+    return (
+      <div key={k} style={{ marginBottom: 10 }}>
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            marginBottom: 4,
+          }}
+        >
+          <span style={{ fontSize: 13, fontWeight: 500 }}>
+            {k}
+          </span>
+
+          <span
+            style={{
+              fontSize: 13,
+              fontWeight: 700,
+              color: (fmtColors[i] || fmtColors[0])[0],
+            }}
+          >
+            {percent}%
+          </span>
+        </div>
+
+        <GradientBar
+          value={percent}
+          colors={fmtColors[i] || fmtColors[0]}
+        />
+      </div>
+    );
+  });
+})()}
               {(content.caption_style || content.captionStyle) && (
                 <div style={{ background: "rgba(16,185,129,0.07)", borderRadius: 12, padding: "0.8rem", border: "1px solid rgba(16,185,129,0.18)" }}>
                   <p style={{ margin: 0, fontSize: 12, color: "#047857" }}><b>Caption Style:</b> {content.caption_style || content.captionStyle}</p>
