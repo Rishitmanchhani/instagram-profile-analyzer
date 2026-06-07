@@ -247,70 +247,85 @@ function Dashboard({ username, data: d, onReset }) {
           </GlassCard>
         </section>
 
-        {/* Niche + Posting */}
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(280px,1fr))", gap: "1rem", marginBottom: "1.5rem" }}>
-          {Object.keys(niche).length > 0 && (
-            <GlassCard>
-              <SectionLabel icon="🎯" label="Niche Detection" />
-              <div style={{ display: "flex", flexDirection: "column", gap: "0.85rem" }}>
-                {[
-                  ["Primary Niche", niche.primary_niche || niche.primary, C.primary],
-                  ["Secondary Niche", niche.secondary_niche || niche.secondary, C.secondary],
-                  ["Audience Category", niche.audience_category || niche.audienceCategory, C.accent],
-                ].filter(([,v]) => v).map(([l,v,c]) => (
-                  <div key={l} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
-                    <span style={{ fontSize: 13, color: C.muted }}>{l}</span>
-                    <Tag color={c}>{v}</Tag>
-                  </div>
-                ))}
-                {(niche.confidence_score || niche.confidenceScore) && (
-                  <div style={{ marginTop: 4 }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
-                      <span style={{ fontSize: 13, color: C.muted }}>Confidence Score</span>
-                      <span style={{ fontSize: 13, fontWeight: 700, color: C.secondary }}>{niche.confidence_score || niche.confidenceScore}%</span>
-                    </div>
-                    <GradientBar value={niche.confidence_score || niche.confidenceScore} colors={["#5B8CFF","#7B61FF"]} />
-                  </div>
-                )}
-              </div>
-            </GlassCard>
-          )}
 
-          {Object.keys(posting).length > 0 && (
-            <GlassCard>
-              <SectionLabel icon="🕐" label="Posting Analysis" />
-              <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
-                {(posting.posting_frequency || posting.frequency) && (
-                  <div style={{ background: "rgba(255,255,255,0.6)", borderRadius: 14, border: "1px solid rgba(255,255,255,0.6)", padding: "0.85rem", textAlign: "center" }}>
-                    <div style={{ fontSize: "1.1rem", fontWeight: 700 }}>{posting.posting_frequency || posting.frequency}</div>
-                    <div style={{ fontSize: 11, color: C.muted, marginTop: 2, textTransform: "uppercase", letterSpacing: "0.06em" }}>Posting Frequency</div>
-                  </div>
-                )}
-                {(posting.consistency_score || posting.consistencyScore) && (
-                  <div>
-                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
-                      <span style={{ fontSize: 13, color: C.muted }}>Consistency</span>
-                      <span style={{ fontSize: 13, fontWeight: 700, color: C.secondary }}>{posting.consistency_score || posting.consistencyScore}%</span>
-                    </div>
-                    <GradientBar value={posting.consistency_score || posting.consistencyScore} colors={["#5B8CFF","#7B61FF"]} height={8} />
-                  </div>
-                )}
-                {bestTimes.length > 0 && (
-                  <div>
-                    <p style={{ fontSize: 11, color: C.muted, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8 }}>Best Times</p>
-                    {bestTimes.map((t,i) => (
-                      <div key={i} style={{ display: "flex", gap: 8, alignItems: "center", padding: "0.5rem 0.75rem", background: "rgba(251,188,5,0.08)", borderRadius: 10, border: "1px solid rgba(251,188,5,0.2)", marginBottom: 6 }}>
-                        <span style={{ color: C.yellow }}>⏰</span>
-                        <span style={{ fontSize: 13, fontWeight: 500 }}>{t}</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </GlassCard>
-          )}
+
+   {Object.keys(niche).length > 0 && (
+  <GlassCard>
+    <SectionLabel icon="🎯" label="Niche Detection" />
+
+    <div style={{ display: "flex", flexDirection: "column", gap: "0.85rem" }}>
+      {[
+        ["Primary Niche", niche.primary_niche || niche.primary, C.primary],
+        ["Secondary Niche", niche.secondary_niche || niche.secondary, C.secondary],
+        ["Audience Category", niche.audience_category || niche.audienceCategory, C.accent],
+      ]
+        .filter(([, v]) => v)
+        .map(([l, v, c]) => (
+          <div
+            key={l}
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              flexWrap: "wrap",
+              gap: 8,
+            }}
+          >
+            <span style={{ fontSize: 13, color: C.muted }}>{l}</span>
+            <Tag color={c}>{v}</Tag>
+          </div>
+        ))}
+
+      {(niche.confidence_score !== undefined ||
+        niche.confidenceScore !== undefined) && (
+        <div style={{ marginTop: 4 }}>
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              marginBottom: 6,
+            }}
+          >
+            <span style={{ fontSize: 13, color: C.muted }}>
+              Confidence Score
+            </span>
+
+            <span
+              style={{
+                fontSize: 13,
+                fontWeight: 700,
+                color: C.secondary,
+              }}
+            >
+              {Math.round(
+                ((niche.confidence_score ??
+                  niche.confidenceScore ??
+                  0) * 100)
+              )}
+              %
+            </span>
+          </div>
+
+          <GradientBar
+            value={
+              (niche.confidence_score ??
+                niche.confidenceScore ??
+                0) * 100
+            }
+            colors={["#5B8CFF", "#7B61FF"]}
+          />
         </div>
+      )}
+    </div>
+  </GlassCard>
+)}
 
+
+
+
+
+
+        
         {/* Content + Engagement */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(280px,1fr))", gap: "1rem", marginBottom: "1.5rem" }}>
           {Object.keys(content).length > 0 && (
