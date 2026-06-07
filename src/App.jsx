@@ -176,9 +176,17 @@ function Dashboard({ username, data: d, onReset }) {
   const gaps = d.content_gaps || d.contentGaps || [];
   const recs = d.recommendations || [];
 
-  const formatBreakdown = content.format_breakdown || content.formatBreakdown || {};
+  const formatBreakdown =
+  posting.content_mix ||
+  content.format_breakdown ||
+  content.formatBreakdown ||
+  {};
   const sentimentBreakdown = engagement.sentiment_breakdown || engagement.sentimentBreakdown || {};
-  const bestTimes = posting.best_times || posting.bestTimes || [];
+  const bestTimes =
+  posting.best_posting_times ||
+  posting.best_times ||
+  posting.bestTimes ||
+  [];
   const themes = content.themes || content.content_themes || [];
   const strengths = audience.strengths || [];
   const weaknesses = audience.weaknesses || [];
