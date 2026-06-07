@@ -721,6 +721,10 @@ export default function App() {
 
       const raw = await response.json();
 
+      console.log("RAW N8N DATA:", data);
+
+setResults(data);
+
       // ── Handle all possible response shapes ──
       // Shape A: [ { username, report: {...} } ]   ← your current n8n output
       // Shape B: { username, report: {...} }
