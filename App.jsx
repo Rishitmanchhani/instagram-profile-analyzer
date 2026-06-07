@@ -430,7 +430,7 @@ const recs = Array.isArray(d.recommendations)
             <GlassCard>
               {(audience.audience_type || audience.type) && (
                 <div style={{ background: "linear-gradient(135deg,rgba(91,140,255,0.07),rgba(123,97,255,0.05))", borderRadius: 14, padding: "1rem", border: "1px solid rgba(91,140,255,0.15)", marginBottom: "1.25rem" }}>
-                  <p style={{ color: "#374151", fontSize: 14, fontWeight: 500 }}>{audience.audience_type || audience.type}</p>
+                  <p style={{ color: "#374151", fontSize: 14, fontWeight: 500 }}>{audience.audience_type?.primary}</p>
                 </div>
               )}
               {(audience.growth_trajectory || audience.trajectory) && (
@@ -474,25 +474,67 @@ const recs = Array.isArray(d.recommendations)
           </section>
         )}
 
-        {/* Recommendations */}
-        {recs.length > 0 && (
-          <section style={{ marginBottom: "1.5rem" }}>
-            <SectionLabel icon="💡" label="AI Recommendations" />
-            <div style={{ display: "flex", flexDirection: "column", gap: "0.85rem" }}>
-              {recs.map((r,i) => (
-                <GlassCard key={i} style={{ display: "flex", gap: "1rem", alignItems: "flex-start" }}>
-                  <div style={{ width: 34, height: 34, borderRadius: 10, background: "linear-gradient(135deg,#5B8CFF,#7B61FF)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 700, flexShrink: 0, boxShadow: "0 4px 12px rgba(91,140,255,0.3)" }}>{i+1}</div>
-                  <div style={{ flex: 1 }}>
-                    <h4 style={{ fontSize: 15, fontWeight: 700, marginBottom: 5 }}>{r.title || r.recommendation}</h4>
-                    <p style={{ fontSize: 13, color: C.muted, lineHeight: 1.65, marginBottom: 8 }}>{r.description || r.details}</p>
-                    {(r.impact || r.expected_impact) && <span style={{ fontSize: 12, color: C.secondary, fontWeight: 600 }}>📈 Expected: {r.impact || r.expected_impact}</span>}
-                  </div>
-                </GlassCard>
-              ))}
-            </div>
-          </section>
-        )}
+       {/* Recommendations */}
+{recs.length > 0 && (
+  <section style={{ marginBottom: "1.5rem" }}>
+    <SectionLabel icon="💡" label="AI Recommendations" />
 
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        gap: "0.85rem",
+      }}
+    >
+      {recs.map((r, i) => (
+        <GlassCard
+          key={i}
+          style={{
+            display: "flex",
+            gap: "1rem",
+            alignItems: "flex-start",
+          }}
+        >
+          <div
+            style={{
+              width: 34,
+              height: 34,
+              borderRadius: 10,
+              background:
+                "linear-gradient(135deg,#5B8CFF,#7B61FF)",
+              color: "#fff",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              fontSize: 13,
+              fontWeight: 700,
+              flexShrink: 0,
+            }}
+          >
+            {i + 1}
+          </div>
+
+          <div style={{ flex: 1 }}>
+            <p
+              style={{
+                fontSize: 14,
+                lineHeight: 1.7,
+                margin: 0,
+              }}
+            >
+              {typeof r === "string"
+                ? r
+                : r.title ||
+                  r.recommendation ||
+                  r.description ||
+                  JSON.stringify(r)}
+            </p>
+          </div>
+        </GlassCard>
+      ))}
+    </div>
+  </section>
+)}
         {/* Export */}
         <section>
           <GlassCard style={{ textAlign: "center", background: "linear-gradient(135deg,rgba(91,140,255,0.07),rgba(255,79,163,0.05))", border: "1px solid rgba(91,140,255,0.18)" }}>
