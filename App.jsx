@@ -1,4 +1,17 @@
-import { useState } from "react";
+useEffect(() => {
+  const t1 = setInterval(() => {
+    setIdx(i => Math.min(i + 1, LOADING_MSGS.length - 1));
+  }, 950);
+
+  const t2 = setInterval(() => {
+    setProg(p => Math.min(p + 1.4, 95));
+  }, 75);
+
+  return () => {
+    clearInterval(t1);
+    clearInterval(t2);
+  };
+}, []);
 
 const C = {
   primary: "#5B8CFF", secondary: "#7B61FF", accent: "#FF4FA3",
