@@ -173,12 +173,22 @@ function Dashboard({ username, data: d, onReset }) {
   const engagement = d.engagement_analysis || d.engagement || {};
   const topPosts = d.top_posts || d.topPosts || [];
   const audience = d.audience_insights || d.audience || {};
-  const gaps = d.content_gaps || d.contentGaps || [];
-  const recs = d.recommendations || [];
-
-  const formatBreakdown = content.format_breakdown || content.formatBreakdown || {};
+  const gaps = d.content_gaps || d.contentGaps || {};
+const recs = Array.isArray(d.recommendations)
+  ? d.recommendations
+  : [];
+  
+  const formatBreakdown =
+  posting.content_mix ||
+  content.format_breakdown ||
+  content.formatBreakdown ||
+  {};
   const sentimentBreakdown = engagement.sentiment_breakdown || engagement.sentimentBreakdown || {};
-  const bestTimes = posting.best_times || posting.bestTimes || [];
+  const bestTimes =
+  posting.best_posting_times ||
+  posting.best_times ||
+  posting.bestTimes ||
+  [];
   const themes = content.themes || content.content_themes || [];
   const strengths = audience.strengths || [];
   const weaknesses = audience.weaknesses || [];
