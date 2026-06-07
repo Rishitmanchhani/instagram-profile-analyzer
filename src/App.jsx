@@ -306,22 +306,34 @@ function Dashboard({ username, data: d, onReset }) {
               }}
             >
               {Math.round(
-                ((niche.confidence_score ??
-                  niche.confidenceScore ??
-                  0) * 100)
-              )}
-              %
+  (niche.confidence_score ??
+    niche.confidenceScore ??
+    0) <= 1
+    ? (niche.confidence_score ??
+        niche.confidenceScore ??
+        0) * 100
+    : (niche.confidence_score ??
+        niche.confidenceScore ??
+        0)
+)}
+%
             </span>
           </div>
 
           <GradientBar
-            value={
-              (niche.confidence_score ??
-                niche.confidenceScore ??
-                0) * 100
-            }
-            colors={["#5B8CFF", "#7B61FF"]}
-          />
+  value={
+    (niche.confidence_score ??
+      niche.confidenceScore ??
+      0) <= 1
+      ? (niche.confidence_score ??
+          niche.confidenceScore ??
+          0) * 100
+      : (niche.confidence_score ??
+          niche.confidenceScore ??
+          0)
+  }
+  colors={["#5B8CFF", "#7B61FF"]}
+/>
         </div>
       )}
     </div>
