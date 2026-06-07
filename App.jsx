@@ -351,11 +351,10 @@ function Dashboard({ username, data: d, onReset }) {
               <SectionLabel icon="📊" label="Engagement Analysis" />
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem", marginBottom: "1.25rem" }}>
                 {[
-                  ["Rate", engagement.engagement_rate || engagement.rate, ["#5B8CFF","#7B61FF"]],
-                  ["Avg Likes", engagement.average_likes || engagement.avgLikes, ["#FF4FA3","#FF6B35"]],
-                  ["Avg Comments", engagement.average_comments || engagement.avgComments, ["#10B981","#059669"]],
-                  ["Sentiment", engagement.overall_sentiment || engagement.sentiment || "—", ["#F59E0B","#D97706"]],
-                ].filter(([,v]) => v).map(([l,v,g]) => (
+                  [
+  ["Avg Likes", engagement.average_likes, ["#FF4FA3","#FF6B35"]],
+  ["Best Times", bestTimes?.join(", "), ["#5B8CFF","#7B61FF"]],
+].filter(([,v]) => v).map(([l,v,g]) => (
                   <div key={l} style={{ background: "rgba(255,255,255,0.6)", border: "1px solid rgba(255,255,255,0.6)", borderRadius: 14, padding: "0.9rem" }}>
                     <div style={{ fontSize: 10, color: C.muted, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 4 }}>{l}</div>
                     <div style={{ fontSize: "1.15rem", fontWeight: 800, background: `linear-gradient(135deg,${g[0]},${g[1]})`, WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text" }}>{v}</div>
