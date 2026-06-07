@@ -173,7 +173,9 @@ function Dashboard({ username, data: d, onReset }) {
   const engagement = d.engagement_analysis || d.engagement || {};
   const topPosts = d.top_posts || d.topPosts || [];
   const audience = d.audience_insights || d.audience || {};
-  const gaps = d.content_gaps || d.contentGaps || {};
+  const gaps = Array.isArray(d.content_gaps)
+  ? d.content_gaps
+  : [];
 const recs = Array.isArray(d.recommendations)
   ? d.recommendations
   : [];
@@ -430,12 +432,33 @@ const recs = Array.isArray(d.recommendations)
             <GlassCard>
               {(audience.audience_type || audience.type) && (
                 <div style={{ background: "linear-gradient(135deg,rgba(91,140,255,0.07),rgba(123,97,255,0.05))", borderRadius: 14, padding: "1rem", border: "1px solid rgba(91,140,255,0.15)", marginBottom: "1.25rem" }}>
-                  <p style={{ color: "#374151", fontSize: 14, fontWeight: 500 }}>{audience.audience_type?.primary}</p>
+                 <p
+  style={{
+    color: "#374151",
+    fontSize: 14,
+    fontWeight: 500,
+  }}
+>
+  {
+    typeof audience.audience_type === "object"
+      ? audience.audience_type.primary
+      : audience.audience_type
+  }
+</p>
                 </div>
               )}
-              {(audience.growth_trajectory || audience.trajectory) && (
-                <p style={{ fontSize: 13, color: C.secondary, fontWeight: 600, marginBottom: "1.25rem" }}>📈 {audience.growth_trajectory || audience.trajectory}</p>
-              )}
+              {typeof audience.growth_trajectory === "string" && (
+  <p
+    style={{
+      fontSize: 13,
+      color: C.secondary,
+      fontWeight: 600,
+      marginBottom: "1.25rem",
+    }}
+  >
+    📈 {audience.growth_trajectory}
+  </p>
+)}
               {(strengths.length > 0 || weaknesses.length > 0) && (
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(220px,1fr))", gap: "1rem" }}>
                   {strengths.length > 0 && (
