@@ -271,7 +271,11 @@ const audience =
     ? Object.entries(audienceTypeObj).filter(([,v]) => typeof v === "string")
     : null;
 
-  const growthTraj  = strVal(audience.growth_trajectory || audience.trajectory);
+  const growthTraj =
+  audienceRaw?.growth_trajectory?.status ||
+  audienceRaw?.growth_trajectory ||
+  audience?.trajectory ||
+  null;
   const strengths   = arrVal(audience.strengths || profile.strengths);
   const weaknesses  = arrVal(audience.weaknesses);
   const audienceInts = arrVal(audience.audience_interests || audience.interests);
