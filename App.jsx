@@ -34,6 +34,7 @@ const globalCss = `
   input::placeholder{color:#9CA3AF;}
 `;
 
+/* ── HELPERS ── */
 function GradientText({ children, style = {} }) {
   return <span style={{ background: "linear-gradient(135deg,#5B8CFF,#7B61FF,#FF4FA3)", backgroundSize: "200% 200%", animation: "gradShift 4s ease infinite", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text", ...style }}>{children}</span>;
 }
@@ -52,10 +53,9 @@ function SectionLabel({ icon, label }) {
 }
 
 function GradientBar({ value, colors = ["#5B8CFF", "#7B61FF"], height = 7 }) {
-  const num = parseFloat(value) || 0;
   return (
     <div style={{ background: "rgba(91,140,255,0.12)", borderRadius: 999, height, overflow: "hidden" }}>
-      <div style={{ width: `${Math.min(num, 100)}%`, height: "100%", background: `linear-gradient(90deg,${colors[0]},${colors[1]})`, borderRadius: 999, transition: "width 1s ease" }} />
+      <div style={{ width: `${value}%`, height: "100%", background: `linear-gradient(90deg,${colors[0]},${colors[1]})`, borderRadius: 999, transition: "width 1s ease" }} />
     </div>
   );
 }
@@ -75,6 +75,7 @@ function PageBg() {
   );
 }
 
+/* ── LOADING ── */
 function LoadingScreen({ username }) {
   const [idx, setIdx] = useState(0);
   const [prog, setProg] = useState(0);
@@ -106,6 +107,7 @@ function LoadingScreen({ username }) {
   );
 }
 
+/* ── ERROR ── */
 function ErrorScreen({ message, onRetry }) {
   return (
     <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", padding: "2rem", position: "relative", fontFamily: "Inter,sans-serif" }}>
@@ -120,6 +122,7 @@ function ErrorScreen({ message, onRetry }) {
   );
 }
 
+/* ── HERO ── */
 function HeroPage({ onAnalyze }) {
   const [val, setVal] = useState("");
   const [focused, setFocused] = useState(false);
@@ -158,132 +161,31 @@ function HeroPage({ onAnalyze }) {
   );
 }
 
-/* ── helpers ── */
-function strVal(v) {
-  if (v == null) return null;
-  if (typeof v === "string") return v;
-  if (typeof v === "number") return String(v);
-  if (typeof v === "object") {
-    return v.primary || v.name || v.label || Object.values(v).filter(x => typeof x === "string")[0] || null;
-  }
-  return null;
-}
-
-function arrVal(v) {
-  if (Array.isArray(v)) return v;
-  if (v && typeof v === "object") return Object.values(v).filter(x => typeof x === "string");
-  return [];
-}
-
-/**
- * FIX: Format engagement rate properly.
- * n8n returns 0.004 (decimal) but we want to show "0.40%" not "0.004%"
- * If value > 1 assume it's already a percentage. If ≤ 1, multiply by 100.
- */
-function fmtEngRate(v) {
-  if (v == null) return null;
-  if (typeof v === "string") return v.includes("%") ? v : v;
-  if (typeof v === "number") {
-    const pct = v <= 1 ? (v * 100).toFixed(2) : v.toFixed(2);
-    return `${pct}%`;
-  }
-  return String(v);
-}
-
-/**
- * FIX: Detect if engagement_analysis is a malformed LLM-request payload
- * (has model/messages keys instead of actual results).
- */
-function isEngagementBroken(eng) {
-  if (!eng || typeof eng !== "object") return true;
-  // If it has "messages" array (LLM request leaked), it's broken
-  return Array.isArray(eng.messages) || ("model" in eng && "temperature" in eng);
-}
-
 /* ── DASHBOARD ── */
-function Dashboard({ username, data: raw, onReset }) {
+function Dashboard({ username, data: d, onReset }) {
   const fmtColors = [["#5B8CFF","#7B61FF"],["#10B981","#059669"],["#F59E0B","#D97706"],["#FF4FA3","#FF6B35"]];
 
-  const d = (raw.report && typeof raw.report === "object") ? raw.report : raw;
+  // Safely read nested fields with fallbacks
+  const profile = d.profile_overview || d.profile || {};
+  const niche = d.niche_detection || d.niche || {};
+  const posting = d.posting_analysis || d.posting || {};
+  const content = d.content_analysis || d.content || {};
+  const engagement = d.engagement_analysis || d.engagement || {};
+  const topPosts = d.top_posts || d.topPosts || [];
+  const audience = d.audience_insights || d.audience || {};
+  const gaps = d.content_gaps || d.contentGaps || [];
+  const recs = d.recommendations || [];
 
-  const profile    = d.profile_overview   || d.profile   || {};
-  const niche      = d.niche_detection    || d.niche      || {};
-  const posting    = d.posting_analysis   || d.posting    || (typeof d.posting_frequency === "object" ? d.posting_frequency : {});
-  const content    = d.content_analysis   || d.content    || {};
-  const rawEng     = d.engagement_analysis|| d.engagement || {};
-  const topPosts   = Array.isArray(d.top_posts)   ? d.top_posts
-                   : Array.isArray(d.topPosts)     ? d.topPosts : [];
-  const audienceRaw = d.audience_insights || d.audience || {};
-
-const audience =
-  audienceRaw.audience_insights ||
-  audienceRaw;
-  // ── FIX: fall back to audience_insights when engagement_analysis is broken ──
-  const engBroken = isEngagementBroken(rawEng);
-  const engagement = engBroken ? {} : rawEng;
-
-  // Pull engagement numbers — prefer engagement_analysis, fallback to audience_insights
-  const engRate     = engagement.engagement_rate   ?? audience.engagement_rate;
-  const avgLikes    = engagement.average_likes     ?? engagement.avgLikes    ?? audience.average_likes_per_post;
-  const avgComments = engagement.average_comments  ?? engagement.avgComments ?? audience.average_comments_per_post;
-  const sentiment   = strVal(engagement.overall_sentiment || engagement.sentiment || engagement.engagement_quality);
-  const perfSummary = engagement.performance_summary || null;
+  const formatBreakdown = content.format_breakdown || content.formatBreakdown || {};
   const sentimentBreakdown = engagement.sentiment_breakdown || engagement.sentimentBreakdown || {};
-
-  // content_gaps
-  let gaps = [];
-  if (Array.isArray(d.content_gaps)) {
-    gaps = d.content_gaps;
-  } else if (d.content_gaps && typeof d.content_gaps === "object") {
-    const cg = d.content_gaps;
-    if (cg.underutilized_formats) cg.underutilized_formats.forEach(f => gaps.push({ gap: "Underutilized Format", opportunity: f }));
-    if (cg.missing_topics)        cg.missing_topics.forEach(t => gaps.push({ gap: "Missing Topic", opportunity: t }));
-  }
-
-  const recs = Array.isArray(d.recommendations) ? d.recommendations : [];
-
-  // posting sub-fields
-  const postingFreq  = strVal(posting.posting_frequency || posting.frequency || (typeof d.posting_frequency === "string" ? d.posting_frequency : null));
-  const consistScore = posting.consistency_score || posting.consistencyScore;
-  const bestTimes    = arrVal(posting.best_posting_times || posting.best_times || posting.bestTimes);
-
-  // content sub-fields
-  const themes = arrVal(content.themes || content.content_themes);
-  const rawFmt = content.format_breakdown || content.formatBreakdown || posting.content_mix || {};
-  const formatBreakdown = {};
-  if (rawFmt) {
-    Object.entries(rawFmt).forEach(([k, v]) => {
-      const label = k.charAt(0).toUpperCase() + k.slice(1);
-      formatBreakdown[label] = typeof v === "number" ? v : parseFloat(v) || 0;
-    });
-  }
-  const fmtTotal = Object.values(formatBreakdown).reduce((a,b) => a+b, 0);
-  const fmtNormalised = {};
-  Object.entries(formatBreakdown).forEach(([k,v]) => {
-    fmtNormalised[k] = fmtTotal > 0 ? Math.round((v / fmtTotal) * 100) : v;
-  });
-
-  // audience sub-fields
-  // FIX: audience_type is an object {primary, secondary, tertiary} — render all tiers
-  const audienceTypeObj = audience.audience_type || audience.type || null;
-  const audienceTypeStr = strVal(audienceTypeObj);
-  const audienceTypeTiers = (audienceTypeObj && typeof audienceTypeObj === "object" && !Array.isArray(audienceTypeObj))
-    ? Object.entries(audienceTypeObj).filter(([,v]) => typeof v === "string")
-    : null;
-
-  const growthTraj =
-  audienceRaw?.growth_trajectory?.status ||
-  audienceRaw?.growth_trajectory ||
-  audience?.trajectory ||
-  null;
-  const strengths   = arrVal(audience.strengths || profile.strengths);
-  const weaknesses  = arrVal(audience.weaknesses);
-  const audienceInts = arrVal(audience.audience_interests || audience.interests);
+  const bestTimes = posting.best_times || posting.bestTimes || [];
+  const themes = content.themes || content.content_themes || [];
+  const strengths = audience.strengths || [];
+  const weaknesses = audience.weaknesses || [];
 
   return (
     <div style={{ minHeight: "100vh", fontFamily: "Inter,sans-serif", color: C.text, position: "relative" }}>
       <PageBg />
-
       {/* topbar */}
       <div className="glass" style={{ position: "sticky", top: 0, zIndex: 100, borderRadius: 0, borderLeft: 0, borderRight: 0, borderTop: 0, padding: "0.9rem 2rem", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
@@ -292,7 +194,7 @@ const audience =
           </div>
           <div>
             <div style={{ fontSize: 14, fontWeight: 700 }}>Analysis Report</div>
-            <div style={{ fontSize: 11, color: C.muted }}>@{profile.username || username}</div>
+            <div style={{ fontSize: 11, color: C.muted }}>@{username}</div>
           </div>
         </div>
         <button className="btn-ghost" onClick={onReset} style={{ fontSize: 13, padding: "0.5rem 1rem" }}>← New Analysis</button>
@@ -300,14 +202,14 @@ const audience =
 
       <div style={{ maxWidth: 1100, margin: "0 auto", padding: "2rem 1rem", position: "relative", zIndex: 1 }}>
 
-        {/* ── Profile Overview ── */}
+        {/* Profile Overview */}
         <section style={{ marginBottom: "1.5rem" }}>
           <SectionLabel icon="👤" label="Profile Overview" />
           <GlassCard>
             <div style={{ display: "flex", gap: "1.5rem", flexWrap: "wrap", marginBottom: "1.5rem", alignItems: "flex-start" }}>
-              {profile.profile_picture_url ? (
+              {profile.profile_picture_url || profile.profileImage ? (
                 <div style={{ position: "relative" }}>
-                  <img src={profile.profile_picture_url} alt="" style={{ width: 76, height: 76, borderRadius: "50%", border: "2.5px solid rgba(91,140,255,0.4)", objectFit: "cover" }} onError={e => e.target.style.display="none"} />
+                  <img src={profile.profile_picture_url || profile.profileImage} alt="" style={{ width: 76, height: 76, borderRadius: "50%", border: "2.5px solid rgba(91,140,255,0.4)", objectFit: "cover" }} />
                   {(profile.is_verified || profile.verified) && (
                     <span style={{ position: "absolute", bottom: 2, right: 2, background: "linear-gradient(135deg,#5B8CFF,#7B61FF)", borderRadius: "50%", width: 20, height: 20, display: "flex", alignItems: "center", justifyContent: "center" }}>
                       <svg width={10} height={10} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth={3}><polyline points="20 6 9 17 4 12"/></svg>
@@ -315,395 +217,235 @@ const audience =
                   )}
                 </div>
               ) : (
-                <div style={{ position: "relative" }}>
-                  <div style={{ width: 76, height: 76, borderRadius: "50%", background: "linear-gradient(135deg,#5B8CFF,#7B61FF)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 28, color: "#fff", flexShrink: 0 }}>
-                    {(profile.full_name || profile.name || username || "?")[0].toUpperCase()}
-                  </div>
-                  {(profile.is_verified || profile.verified) && (
-                    <span style={{ position: "absolute", bottom: 2, right: 2, background: "linear-gradient(135deg,#5B8CFF,#7B61FF)", borderRadius: "50%", width: 20, height: 20, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                      <svg width={10} height={10} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth={3}><polyline points="20 6 9 17 4 12"/></svg>
-                    </span>
-                  )}
+                <div style={{ width: 76, height: 76, borderRadius: "50%", background: "linear-gradient(135deg,#5B8CFF,#7B61FF)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 28, color: "#fff", flexShrink: 0 }}>
+                  {(profile.full_name || profile.name || username || "?")[0].toUpperCase()}
                 </div>
               )}
               <div style={{ flex: 1, minWidth: 200 }}>
                 <h2 style={{ fontSize: "1.2rem", fontWeight: 700, marginBottom: 4 }}>{profile.full_name || profile.name || username}</h2>
                 <p style={{ marginBottom: 8 }}><GradientText style={{ fontSize: 13, fontWeight: 600 }}>@{profile.username || username}</GradientText></p>
-                <p style={{ color: C.muted, fontSize: 14, lineHeight: 1.65 }}>{profile.bio || profile.biography || profile.bio_summary || "—"}</p>
+                <p style={{ color: C.muted, fontSize: 14, lineHeight: 1.65 }}>{profile.bio || profile.biography || "—"}</p>
               </div>
             </div>
-
-            {/* stat pills */}
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(110px,1fr))", gap: "0.75rem", marginBottom: "1.25rem" }}>
               {[
-                ["Followers", profile.followers_count ?? profile.followers, ["#5B8CFF","#7B61FF"]],
-                ["Following", profile.following_count ?? profile.following, ["#10B981","#059669"]],
-                ["Posts",     profile.posts_count     ?? profile.media_count ?? profile.totalPosts, ["#F59E0B","#D97706"]],
-              ].filter(([,v]) => v != null).map(([l,v,g]) => (
+                ["Followers", profile.followers_count || profile.followers, ["#5B8CFF","#7B61FF"]],
+                ["Following", profile.following_count || profile.following, ["#10B981","#059669"]],
+                ["Posts", profile.posts_count || profile.totalPosts || profile.media_count, ["#F59E0B","#D97706"]],
+              ].map(([l,v,g]) => v != null && (
                 <div key={l} style={{ background: "rgba(255,255,255,0.6)", borderRadius: 16, border: "1px solid rgba(255,255,255,0.6)", padding: "1rem", textAlign: "center" }}>
-                  <div style={{ fontSize: "1.35rem", fontWeight: 800, background: `linear-gradient(135deg,${g[0]},${g[1]})`, WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text" }}>
-                    {typeof v === "number" ? v.toLocaleString() : v}
-                  </div>
+                  <div style={{ fontSize: "1.35rem", fontWeight: 800, background: `linear-gradient(135deg,${g[0]},${g[1]})`, WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text" }}>{typeof v === "number" ? v.toLocaleString() : v}</div>
                   <div style={{ fontSize: 11, color: C.muted, marginTop: 3, fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.06em" }}>{l}</div>
                 </div>
               ))}
             </div>
-
-            {(profile.account_summary || profile.summary) && (
+            {(profile.summary || profile.account_summary) && (
               <div style={{ background: "linear-gradient(135deg,rgba(91,140,255,0.08),rgba(123,97,255,0.06))", borderRadius: 14, padding: "1rem", border: "1px solid rgba(91,140,255,0.15)" }}>
-                <p style={{ color: "#4B5563", fontSize: 14, lineHeight: 1.65 }}>{profile.account_summary || profile.summary}</p>
-              </div>
-            )}
-
-            {strengths.length > 0 && !audience.strengths && (
-              <div style={{ marginTop: "1rem" }}>
-                <p style={{ fontSize: 11, color: C.green, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 8 }}>Profile Strengths</p>
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                  {strengths.map((s,i) => <Tag key={i} color={C.green}>{s}</Tag>)}
-                </div>
+                <p style={{ color: "#4B5563", fontSize: 14, lineHeight: 1.65 }}>{profile.summary || profile.account_summary}</p>
               </div>
             )}
           </GlassCard>
         </section>
 
-        {/* ── Niche + Posting ── */}
+{Object.keys(niche).length > 0 && (
+  <GlassCard>
+    <SectionLabel icon="🎯" label="Niche Detection" />
+
+    <div style={{ display: "flex", flexDirection: "column", gap: "0.85rem" }}>
+      {[
+        ["Primary Niche", niche.primary_niche || niche.primary, C.primary],
+        ["Secondary Niche", niche.secondary_niche || niche.secondary, C.secondary],
+        ["Audience Category", niche.audience_category || niche.audienceCategory, C.accent],
+      ]
+        .filter(([, v]) => v)
+        .map(([l, v, c]) => (
+          <div
+            key={l}
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              flexWrap: "wrap",
+              gap: 8,
+            }}
+          >
+            <span style={{ fontSize: 13, color: C.muted }}>{l}</span>
+            <Tag color={c}>{v}</Tag>
+          </div>
+        ))}
+
+      {(niche.confidence_score !== undefined ||
+        niche.confidenceScore !== undefined) && (
+        <div style={{ marginTop: 4 }}>
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              marginBottom: 6,
+            }}
+          >
+            <span style={{ fontSize: 13, color: C.muted }}>
+              Confidence Score
+            </span>
+
+            <span
+              style={{
+                fontSize: 13,
+                fontWeight: 700,
+                color: C.secondary,
+              }}
+            >
+              {Math.round(
+                ((niche.confidence_score ??
+                  niche.confidenceScore ??
+                  0) * 100)
+              )}
+              %
+            </span>
+          </div>
+
+          <GradientBar
+            value={
+              (niche.confidence_score ??
+                niche.confidenceScore ??
+                0) * 100
+            }
+            colors={["#5B8CFF", "#7B61FF"]}
+          />
+        </div>
+      )}
+    </div>
+  </GlassCard>
+)}
+
+        {/* Content + Engagement */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(280px,1fr))", gap: "1rem", marginBottom: "1.5rem" }}>
-          {Object.keys(niche).length > 0 && (
+          {Object.keys(content).length > 0 && (
             <GlassCard>
-              <SectionLabel icon="🎯" label="Niche Detection" />
-              <div style={{ display: "flex", flexDirection: "column", gap: "0.85rem" }}>
-                {[
-                  ["Primary Niche",    strVal(niche.primary_niche    || niche.primary), C.primary],
-                  ["Secondary Niche",  Array.isArray(niche.secondary_niches) ? niche.secondary_niches[0] : strVal(niche.secondary_niche || niche.secondary), C.secondary],
-                  ["Audience Category",strVal(niche.audience_category || niche.audienceCategory), C.accent],
-                ].filter(([,v]) => v).map(([l,v,c]) => (
-                  <div key={l} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
-                    <span style={{ fontSize: 13, color: C.muted }}>{l}</span>
-                    <Tag color={c}>{v}</Tag>
-                  </div>
-                ))}
-                {Array.isArray(niche.secondary_niches) && niche.secondary_niches.length > 1 && (
+              <SectionLabel icon="📝" label="Content Analysis" />
+              {themes.length > 0 && (
+                <div style={{ marginBottom: "1.25rem" }}>
+                  <p style={{ fontSize: 11, color: C.muted, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8 }}>Themes</p>
                   <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                    {niche.secondary_niches.slice(1).map((n,i) => <Tag key={i} color={C.secondary}>{n}</Tag>)}
+                    {themes.map((t,i) => <span key={i} style={{ background: "rgba(91,140,255,0.08)", color: C.secondary, border: "1px solid rgba(91,140,255,0.2)", borderRadius: 20, padding: "0.25rem 0.75rem", fontSize: 12, fontWeight: 500 }}>{t}</span>)}
                   </div>
-                )}
-                {(niche.confidence_score != null) && (
-                  <div style={{ marginTop: 4 }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
-                      <span style={{ fontSize: 13, color: C.muted }}>Confidence Score</span>
-                      <span style={{ fontSize: 13, fontWeight: 700, color: C.secondary }}>{niche.confidence_score}%</span>
+                </div>
+              )}
+              {Object.keys(formatBreakdown).length > 0 && (
+                <div style={{ marginBottom: "1.25rem" }}>
+                  <p style={{ fontSize: 11, color: C.muted, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 10 }}>Format Breakdown</p>
+                  {Object.entries(formatBreakdown).map(([k,v],i) => (
+                    <div key={k} style={{ marginBottom: 10 }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+                        <span style={{ fontSize: 13, fontWeight: 500 }}>{k}</span>
+                        <span style={{ fontSize: 13, fontWeight: 700, color: (fmtColors[i] || fmtColors[0])[0] }}>{v}%</span>
+                      </div>
+                      <GradientBar value={v} colors={fmtColors[i] || fmtColors[0]} />
                     </div>
-                    <GradientBar value={niche.confidence_score} colors={["#5B8CFF","#7B61FF"]} />
-                  </div>
-                )}
-                {niche.reasoning && (
-                  <p style={{ fontSize: 12, color: C.muted, lineHeight: 1.6, marginTop: 4 }}>{niche.reasoning}</p>
-                )}
-              </div>
+                  ))}
+                </div>
+              )}
+              {(content.caption_style || content.captionStyle) && (
+                <div style={{ background: "rgba(16,185,129,0.07)", borderRadius: 12, padding: "0.8rem", border: "1px solid rgba(16,185,129,0.18)" }}>
+                  <p style={{ margin: 0, fontSize: 12, color: "#047857" }}><b>Caption Style:</b> {content.caption_style || content.captionStyle}</p>
+                </div>
+              )}
             </GlassCard>
           )}
 
-          <GlassCard>
-            <SectionLabel icon="🕐" label="Posting Analysis" />
-            <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
-              {postingFreq && (
-                <div style={{ background: "rgba(255,255,255,0.6)", borderRadius: 14, border: "1px solid rgba(255,255,255,0.6)", padding: "0.85rem", textAlign: "center" }}>
-                  <div style={{ fontSize: "1.1rem", fontWeight: 700 }}>{postingFreq}</div>
-                  <div style={{ fontSize: 11, color: C.muted, marginTop: 2, textTransform: "uppercase", letterSpacing: "0.06em" }}>Posting Frequency</div>
-                </div>
-              )}
-              {posting.average_posts_per_week != null && (
-                <div style={{ background: "rgba(255,255,255,0.6)", borderRadius: 14, border: "1px solid rgba(255,255,255,0.6)", padding: "0.85rem", textAlign: "center" }}>
-                  <div style={{ fontSize: "1.1rem", fontWeight: 700 }}>{posting.average_posts_per_week}× per week</div>
-                  <div style={{ fontSize: 11, color: C.muted, marginTop: 2, textTransform: "uppercase", letterSpacing: "0.06em" }}>Avg Posts / Week</div>
-                </div>
-              )}
-              {consistScore != null && (
-                <div>
-                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
-                    <span style={{ fontSize: 13, color: C.muted }}>Consistency</span>
-                    <span style={{ fontSize: 13, fontWeight: 700, color: C.secondary }}>{consistScore}%</span>
+          {Object.keys(engagement).length > 0 && (
+            <GlassCard>
+              <SectionLabel icon="📊" label="Engagement Analysis" />
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem", marginBottom: "1.25rem" }}>
+                {[
+                  ["Rate", engagement.engagement_rate || engagement.rate, ["#5B8CFF","#7B61FF"]],
+                  ["Avg Likes", engagement.average_likes || engagement.avgLikes, ["#FF4FA3","#FF6B35"]],
+                  ["Avg Comments", engagement.average_comments || engagement.avgComments, ["#10B981","#059669"]],
+                  ["Sentiment", engagement.overall_sentiment || engagement.sentiment || "—", ["#F59E0B","#D97706"]],
+                ].filter(([,v]) => v).map(([l,v,g]) => (
+                  <div key={l} style={{ background: "rgba(255,255,255,0.6)", border: "1px solid rgba(255,255,255,0.6)", borderRadius: 14, padding: "0.9rem" }}>
+                    <div style={{ fontSize: 10, color: C.muted, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 4 }}>{l}</div>
+                    <div style={{ fontSize: "1.15rem", fontWeight: 800, background: `linear-gradient(135deg,${g[0]},${g[1]})`, WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text" }}>{v}</div>
                   </div>
-                  <GradientBar value={consistScore} colors={["#5B8CFF","#7B61FF"]} height={8} />
-                </div>
+                ))}
+              </div>
+              {Object.keys(sentimentBreakdown).length > 0 && (
+                <>
+                  <p style={{ fontSize: 11, color: C.muted, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8 }}>Comment Sentiment</p>
+                  <div style={{ display: "flex", height: 8, borderRadius: 999, overflow: "hidden", gap: 2, marginBottom: 8 }}>
+                    {Object.entries(sentimentBreakdown).map(([k,v],i) => (
+                      <div key={k} style={{ width:`${v}%`, height:"100%", background:["linear-gradient(90deg,#10B981,#059669)","linear-gradient(90deg,#F59E0B,#D97706)","linear-gradient(90deg,#FF4FA3,#EF4444)"][i] || "#ccc", borderRadius: 999 }} />
+                    ))}
+                  </div>
+                  <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
+                    {Object.entries(sentimentBreakdown).map(([k,v],i) => (
+                      <span key={k} style={{ fontSize: 12, color: C.muted }}><span style={{ fontWeight: 700, color:["#10B981","#F59E0B","#EF4444"][i] || C.muted }}>{v}%</span> {k}</span>
+                    ))}
+                  </div>
+                </>
               )}
-              {posting.consistency && (
-                <div style={{ background: "rgba(91,140,255,0.07)", borderRadius: 10, padding: "0.6rem 0.8rem", fontSize: 13, color: C.secondary, fontWeight: 500 }}>
-                  {posting.consistency}
-                </div>
-              )}
-              {bestTimes.length > 0 && (
-                <div>
-                  <p style={{ fontSize: 11, color: C.muted, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8 }}>Best Times</p>
-                  {bestTimes.map((t,i) => (
-                    <div key={i} style={{ display: "flex", gap: 8, alignItems: "center", padding: "0.5rem 0.75rem", background: "rgba(251,188,5,0.08)", borderRadius: 10, border: "1px solid rgba(251,188,5,0.2)", marginBottom: 6 }}>
-                      <span style={{ color: C.yellow }}>⏰</span>
-                      <span style={{ fontSize: 13, fontWeight: 500 }}>{t}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-              {posting.best_posting_time_estimate && bestTimes.length === 0 && (
-                <div style={{ display: "flex", gap: 8, alignItems: "center", padding: "0.5rem 0.75rem", background: "rgba(251,188,5,0.08)", borderRadius: 10, border: "1px solid rgba(251,188,5,0.2)" }}>
-                  <span style={{ color: C.yellow }}>⏰</span>
-                  <span style={{ fontSize: 13, fontWeight: 500 }}>{posting.best_posting_time_estimate}</span>
-                </div>
-              )}
-            </div>
-          </GlassCard>
+            </GlassCard>
+          )}
         </div>
 
-        {/* ── Content + Engagement ── */}
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(280px,1fr))", gap: "1rem", marginBottom: "1.5rem" }}>
-          <GlassCard>
-            <SectionLabel icon="📝" label="Content Analysis" />
-            {themes.length > 0 && (
-              <div style={{ marginBottom: "1.25rem" }}>
-                <p style={{ fontSize: 11, color: C.muted, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8 }}>Themes</p>
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                  {themes.map((t,i) => <span key={i} style={{ background: "rgba(91,140,255,0.08)", color: C.secondary, border: "1px solid rgba(91,140,255,0.2)", borderRadius: 20, padding: "0.25rem 0.75rem", fontSize: 12, fontWeight: 500 }}>{t}</span>)}
-                </div>
-              </div>
-            )}
-            {content.content_themes && typeof content.content_themes === "object" && !Array.isArray(content.content_themes) && themes.length === 0 && (
-              <div style={{ marginBottom: "1.25rem" }}>
-                <p style={{ fontSize: 11, color: C.muted, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8 }}>Themes</p>
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                  {Object.values(content.content_themes).map((t,i) => <span key={i} style={{ background: "rgba(91,140,255,0.08)", color: C.secondary, border: "1px solid rgba(91,140,255,0.2)", borderRadius: 20, padding: "0.25rem 0.75rem", fontSize: 12, fontWeight: 500 }}>{t}</span>)}
-                </div>
-              </div>
-            )}
-            {Object.keys(fmtNormalised).length > 0 && (
-              <div style={{ marginBottom: "1.25rem" }}>
-                <p style={{ fontSize: 11, color: C.muted, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 10 }}>Format Breakdown</p>
-                {Object.entries(fmtNormalised).map(([k,v],i) => (
-                  <div key={k} style={{ marginBottom: 10 }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
-                      <span style={{ fontSize: 13, fontWeight: 500 }}>{k}</span>
-                      <span style={{ fontSize: 13, fontWeight: 700, color: (fmtColors[i] || fmtColors[0])[0] }}>{v}%</span>
-                    </div>
-                    <GradientBar value={v} colors={fmtColors[i] || fmtColors[0]} />
-                  </div>
-                ))}
-              </div>
-            )}
-            {/* FIX: show content_strengths and improvement_areas */}
-            {Array.isArray(content.content_strengths) && content.content_strengths.length > 0 && (
-              <div style={{ marginBottom: "1rem" }}>
-                <p style={{ fontSize: 11, color: C.green, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 8 }}>Content Strengths</p>
-                {content.content_strengths.map((s,i) => (
-                  <div key={i} style={{ fontSize: 13, color: C.muted, display: "flex", gap: 6, marginBottom: 6, alignItems: "flex-start" }}>
-                    <span style={{ color: C.green, flexShrink: 0, fontWeight: 700 }}>✓</span>{s}
-                  </div>
-                ))}
-              </div>
-            )}
-            {Array.isArray(content.improvement_areas) && content.improvement_areas.length > 0 && (
-              <div style={{ marginBottom: "1rem" }}>
-                <p style={{ fontSize: 11, color: C.yellow, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 8 }}>Improvement Areas</p>
-                {content.improvement_areas.map((s,i) => (
-                  <div key={i} style={{ fontSize: 13, color: C.muted, display: "flex", gap: 6, marginBottom: 6, alignItems: "flex-start" }}>
-                    <span style={{ color: C.yellow, flexShrink: 0, fontWeight: 700 }}>→</span>{s}
-                  </div>
-                ))}
-              </div>
-            )}
-            {(content.caption_style || content.captionStyle || content.content_style) && (
-              <div style={{ background: "rgba(16,185,129,0.07)", borderRadius: 12, padding: "0.8rem", border: "1px solid rgba(16,185,129,0.18)", marginBottom: 8 }}>
-                <p style={{ margin: 0, fontSize: 12, color: "#047857" }}><b>Caption Style:</b> {content.caption_style || content.captionStyle || content.content_style}</p>
-              </div>
-            )}
-            {content.hashtag_strategy && (
-              <div style={{ background: "rgba(91,140,255,0.06)", borderRadius: 12, padding: "0.8rem", border: "1px solid rgba(91,140,255,0.15)" }}>
-                <p style={{ margin: 0, fontSize: 12, color: "#1e40af" }}><b>Hashtag Strategy:</b> {content.hashtag_strategy}</p>
-              </div>
-            )}
-            {/* brand_voice */}
-            {content.brand_voice && (
-              <div style={{ background: "rgba(123,97,255,0.06)", borderRadius: 12, padding: "0.8rem", border: "1px solid rgba(123,97,255,0.15)", marginTop: 8 }}>
-                <p style={{ margin: 0, fontSize: 12, color: "#5b21b6" }}><b>Brand Voice:</b> {content.brand_voice}</p>
-              </div>
-            )}
-          </GlassCard>
-
-          <GlassCard>
-            <SectionLabel icon="📊" label="Engagement Analysis" />
-
-            {/* FIX: show note if data came from audience_insights fallback */}
-            {engBroken && (avgLikes != null || engRate != null) && (
-              <div style={{ background: "rgba(245,158,11,0.08)", borderRadius: 10, padding: "0.6rem 0.85rem", border: "1px solid rgba(245,158,11,0.25)", marginBottom: "1rem", fontSize: 12, color: "#92400e" }}>
-                ℹ️ Engagement stats sourced from audience insights (LLM node output not parsed in n8n)
-              </div>
-            )}
-            {engBroken && avgLikes == null && engRate == null && (
-              <div style={{ background: "rgba(239,68,68,0.07)", borderRadius: 10, padding: "0.6rem 0.85rem", border: "1px solid rgba(239,68,68,0.2)", marginBottom: "1rem", fontSize: 12, color: "#991b1b" }}>
-                ⚠️ Engagement data unavailable — fix the LLM response parsing in your n8n workflow (see console for details)
-              </div>
-            )}
-
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem", marginBottom: "1.25rem" }}>
-              {[
-                ["Eng. Rate",    engRate     != null ? fmtEngRate(engRate) : null,                                                            ["#5B8CFF","#7B61FF"]],
-                ["Avg Likes",    avgLikes    != null ? (typeof avgLikes === "number" ? avgLikes.toLocaleString() : avgLikes) : null,           ["#FF4FA3","#FF6B35"]],
-                ["Avg Comments", avgComments != null ? (typeof avgComments === "number" ? avgComments.toLocaleString() : avgComments) : null, ["#10B981","#059669"]],
-                ["Sentiment",    sentiment,                                                                                                    ["#F59E0B","#D97706"]],
-              ].filter(([,v]) => v != null).map(([l,v,g]) => (
-                <div key={l} style={{ background: "rgba(255,255,255,0.6)", border: "1px solid rgba(255,255,255,0.6)", borderRadius: 14, padding: "0.9rem" }}>
-                  <div style={{ fontSize: 10, color: C.muted, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 4 }}>{l}</div>
-                  <div style={{ fontSize: "1.15rem", fontWeight: 800, background: `linear-gradient(135deg,${g[0]},${g[1]})`, WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text" }}>{v}</div>
-                </div>
-              ))}
-            </div>
-            {perfSummary && (
-              <div style={{ background: "rgba(91,140,255,0.07)", borderRadius: 12, padding: "0.8rem", border: "1px solid rgba(91,140,255,0.15)", marginBottom: "1rem" }}>
-                <p style={{ margin: 0, fontSize: 12, color: "#1e40af", lineHeight: 1.6 }}>{perfSummary}</p>
-              </div>
-            )}
-            {Object.keys(sentimentBreakdown).length > 0 && (
-              <>
-                <p style={{ fontSize: 11, color: C.muted, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8 }}>Comment Sentiment</p>
-                <div style={{ display: "flex", height: 8, borderRadius: 999, overflow: "hidden", gap: 2, marginBottom: 8 }}>
-                  {Object.entries(sentimentBreakdown).map(([k,v],i) => (
-                    <div key={k} style={{ width:`${v}%`, height:"100%", background:["linear-gradient(90deg,#10B981,#059669)","linear-gradient(90deg,#F59E0B,#D97706)","linear-gradient(90deg,#FF4FA3,#EF4444)"][i] || "#ccc", borderRadius: 999 }} />
-                  ))}
-                </div>
-                <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
-                  {Object.entries(sentimentBreakdown).map(([k,v],i) => (
-                    <span key={k} style={{ fontSize: 12, color: C.muted }}><span style={{ fontWeight: 700, color:["#10B981","#F59E0B","#EF4444"][i] || C.muted }}>{v}%</span> {k}</span>
-                  ))}
-                </div>
-              </>
-            )}
-            {Array.isArray(engagement.reasons) && engagement.reasons.length > 0 && (
-              <div style={{ marginTop: "1rem" }}>
-                <p style={{ fontSize: 11, color: C.muted, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8 }}>Key Factors</p>
-                {engagement.reasons.map((r,i) => (
-                  <div key={i} style={{ fontSize: 13, color: C.muted, display: "flex", gap: 6, marginBottom: 6 }}>
-                    <span style={{ color: C.primary, fontWeight: 700, flexShrink: 0 }}>→</span>{r}
-                  </div>
-                ))}
-              </div>
-            )}
-          </GlassCard>
-        </div>
-
-        {/* ── Top Posts ── */}
+        {/* Top Posts */}
         {topPosts.length > 0 && (
           <section style={{ marginBottom: "1.5rem" }}>
             <SectionLabel icon="🏆" label="Top Performing Posts" />
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(230px,1fr))", gap: "1rem" }}>
-              {topPosts.map((p,i) => {
-                const hasThumbnail = !!(p.thumbnail_url || p.thumbnail || p.image_url);
-                // FIX: pick emoji based on post type for placeholder
-                const typeEmoji = { video: "🎬", sidecar: "🖼️", carousel: "🖼️", image: "📷" }[(p.type || p.media_type || "").toLowerCase()] || "📷";
-                return (
-                  <div key={i} className="glass-card" style={{ overflow: "hidden", padding: 0 }}>
-                    {hasThumbnail ? (
-                      <div style={{ position: "relative" }}>
-                        <img
-                          src={p.thumbnail_url || p.thumbnail || p.image_url}
-                          alt=""
-                          style={{ width: "100%", height: 155, objectFit: "cover", display: "block" }}
-                          onError={e => { e.target.style.display="none"; e.target.nextSibling.style.display="flex"; }}
-                        />
-                        {/* hidden fallback shown if img errors */}
-                        <div style={{ display: "none", width: "100%", height: 155, background: "linear-gradient(135deg,rgba(91,140,255,0.12),rgba(123,97,255,0.08))", alignItems: "center", justifyContent: "center", fontSize: 40 }}>{typeEmoji}</div>
-                        <div style={{ position: "absolute", top: 10, left: 10, background: "linear-gradient(135deg,#5B8CFF,#7B61FF)", color: "#fff", borderRadius: 8, padding: "0.2rem 0.6rem", fontSize: 11, fontWeight: 700 }}>#{i+1}</div>
-                        {(p.type || p.media_type) && (
-                          <div style={{ position: "absolute", top: 10, right: 10, background: "rgba(0,0,0,0.5)", backdropFilter: "blur(8px)", color: "#fff", borderRadius: 8, padding: "0.2rem 0.6rem", fontSize: 10, fontWeight: 600 }}>{p.type || p.media_type}</div>
-                        )}
-                      </div>
-                    ) : (
-                      /* FIX: styled placeholder card when no thumbnail */
-                      <div style={{ position: "relative", background: "linear-gradient(135deg,rgba(91,140,255,0.10),rgba(123,97,255,0.07))", height: 90, display: "flex", alignItems: "center", justifyContent: "center", gap: 12, borderBottom: "1px solid rgba(91,140,255,0.1)" }}>
-                        <span style={{ fontSize: 36 }}>{typeEmoji}</span>
-                        <div>
-                          <div style={{ background: "linear-gradient(135deg,#5B8CFF,#7B61FF)", color: "#fff", borderRadius: 8, padding: "0.2rem 0.7rem", fontSize: 13, fontWeight: 700, display: "inline-block", marginBottom: 6 }}>#{i+1}</div>
-                          {(p.type || p.media_type) && (
-                            <div><Tag color={C.primary}>{p.type || p.media_type}</Tag></div>
-                          )}
-                        </div>
-                        {p.url && (
-                          <a href={p.url} target="_blank" rel="noreferrer" style={{ position: "absolute", top: 10, right: 10, fontSize: 11, color: C.primary, background: "rgba(255,255,255,0.8)", borderRadius: 8, padding: "0.2rem 0.6rem", textDecoration: "none", fontWeight: 600 }}>View ↗</a>
-                        )}
+              {topPosts.map((p,i) => (
+                <div key={i} className="glass-card" style={{ overflow: "hidden", padding: 0 }}>
+                  {(p.thumbnail_url || p.thumbnail || p.image_url) && (
+                    <div style={{ position: "relative" }}>
+                      <img src={p.thumbnail_url || p.thumbnail || p.image_url} alt="" style={{ width: "100%", height: 155, objectFit: "cover", display: "block" }} onError={e => e.target.style.display="none"} />
+                      <div style={{ position: "absolute", top: 10, left: 10, background: "linear-gradient(135deg,#5B8CFF,#7B61FF)", color: "#fff", borderRadius: 8, padding: "0.2rem 0.6rem", fontSize: 11, fontWeight: 700 }}>#{i+1}</div>
+                      {(p.type || p.media_type) && <div style={{ position: "absolute", top: 10, right: 10, background: "rgba(0,0,0,0.5)", backdropFilter: "blur(8px)", color: "#fff", borderRadius: 8, padding: "0.2rem 0.6rem", fontSize: 10, fontWeight: 600 }}>{p.type || p.media_type}</div>}
+                    </div>
+                  )}
+                  <div style={{ padding: "1rem" }}>
+                    {(p.caption) && <p style={{ fontSize: 13, fontWeight: 600, marginBottom: 8, lineHeight: 1.4 }}>{p.caption}</p>}
+                    <div style={{ display: "flex", gap: 14, marginBottom: 10, flexWrap: "wrap" }}>
+                      {(p.likes || p.like_count) && <span style={{ fontSize: 12, fontWeight: 600, color: C.accent }}>❤ {p.likes || p.like_count}</span>}
+                      {(p.comments || p.comment_count) && <span style={{ fontSize: 12, fontWeight: 600, color: C.primary }}>💬 {p.comments || p.comment_count}</span>}
+                      {(p.engagement_rate) && <span style={{ fontSize: 12, fontWeight: 600, color: C.secondary }}>📊 {p.engagement_rate}</span>}
+                    </div>
+                    {(p.ai_explanation || p.reason || p.why_it_performed) && (
+                      <div style={{ background: "rgba(16,185,129,0.07)", borderRadius: 9, padding: "0.55rem 0.7rem", border: "1px solid rgba(16,185,129,0.18)" }}>
+                        <p style={{ margin: 0, fontSize: 12, color: "#047857", lineHeight: 1.5 }}>{p.ai_explanation || p.reason || p.why_it_performed}</p>
                       </div>
                     )}
-                    <div style={{ padding: "1rem" }}>
-                      {p.caption && (
-                        <p style={{ fontSize: 13, fontWeight: 600, marginBottom: 8, lineHeight: 1.4, display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{p.caption}</p>
-                      )}
-                      <div style={{ display: "flex", gap: 14, marginBottom: 10, flexWrap: "wrap" }}>
-                        {(p.likes ?? p.like_count) != null && <span style={{ fontSize: 12, fontWeight: 600, color: C.accent }}>❤ {typeof (p.likes ?? p.like_count) === "number" ? (p.likes ?? p.like_count).toLocaleString() : (p.likes ?? p.like_count)}</span>}
-                        {(p.comments ?? p.comment_count) != null && <span style={{ fontSize: 12, fontWeight: 600, color: C.primary }}>💬 {typeof (p.comments ?? p.comment_count) === "number" ? (p.comments ?? p.comment_count).toLocaleString() : (p.comments ?? p.comment_count)}</span>}
-                        {p.engagement_rate != null && <span style={{ fontSize: 12, fontWeight: 600, color: C.secondary }}>📊 {fmtEngRate(p.engagement_rate)}</span>}
-                      </div>
-                      {/* FIX: show URL as a link if no thumbnail */}
-                      {!hasThumbnail && p.url && (
-                        <a href={p.url} target="_blank" rel="noreferrer" style={{ display: "inline-block", fontSize: 12, color: C.primary, marginBottom: 8, fontWeight: 600, textDecoration: "none" }}>🔗 View on Instagram ↗</a>
-                      )}
-                      {(p.ai_explanation || p.reason || p.why_it_performed) && (
-                        <div style={{ background: "rgba(16,185,129,0.07)", borderRadius: 9, padding: "0.55rem 0.7rem", border: "1px solid rgba(16,185,129,0.18)" }}>
-                          <p style={{ margin: 0, fontSize: 12, color: "#047857", lineHeight: 1.5 }}>{p.ai_explanation || p.reason || p.why_it_performed}</p>
-                        </div>
-                      )}
-                    </div>
                   </div>
-                );
-              })}
+                </div>
+              ))}
             </div>
           </section>
         )}
 
-        {/* ── Audience Insights ── */}
+        {/* Audience */}
         {Object.keys(audience).length > 0 && (
           <section style={{ marginBottom: "1.5rem" }}>
             <SectionLabel icon="👥" label="Audience Insights" />
             <GlassCard>
-              {/* FIX: render multi-tier audience_type object properly */}
-              {audienceTypeTiers ? (
+              {(audience.audience_type || audience.type) && (
                 <div style={{ background: "linear-gradient(135deg,rgba(91,140,255,0.07),rgba(123,97,255,0.05))", borderRadius: 14, padding: "1rem", border: "1px solid rgba(91,140,255,0.15)", marginBottom: "1.25rem" }}>
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
-                    {audienceTypeTiers.map(([tier, val], i) => (
-                      <div key={tier} style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                        <span style={{ fontSize: 11, color: C.muted, textTransform: "capitalize" }}>{tier}:</span>
-                        <Tag color={[C.primary, C.secondary, C.accent][i] || C.primary}>{val}</Tag>
-                      </div>
-                    ))}
-                  </div>
-                  {audience.age_group_estimate && <p style={{ color: C.muted, fontSize: 13, marginTop: 8 }}>Age group: {audience.age_group_estimate}</p>}
-                </div>
-              ) : audienceTypeStr ? (
-                <div style={{ background: "linear-gradient(135deg,rgba(91,140,255,0.07),rgba(123,97,255,0.05))", borderRadius: 14, padding: "1rem", border: "1px solid rgba(91,140,255,0.15)", marginBottom: "1.25rem" }}>
-                  <p style={{ color: "#374151", fontSize: 14, fontWeight: 500 }}>{audienceTypeStr}</p>
-                  {audience.age_group_estimate && <p style={{ color: C.muted, fontSize: 13, marginTop: 4 }}>Age group: {audience.age_group_estimate}</p>}
-                </div>
-              ) : null}
-
-              {growthTraj && (
-                <p style={{ fontSize: 13, color: C.secondary, fontWeight: 600, marginBottom: "1.25rem" }}>📈 {growthTraj}</p>
-              )}
-
-              {audienceInts.length > 0 && (
-                <div style={{ marginBottom: "1.25rem" }}>
-                  <p style={{ fontSize: 11, color: C.muted, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8 }}>Interests</p>
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                    {audienceInts.map((t,i) => <Tag key={i} color={C.secondary}>{t}</Tag>)}
-                  </div>
+                  <p style={{ color: "#374151", fontSize: 14, fontWeight: 500 }}>{audience.audience_type || audience.type}</p>
                 </div>
               )}
-
-              {(audience.strengths?.length > 0 || audience.weaknesses?.length > 0) && (
+              {(audience.growth_trajectory || audience.trajectory) && (
+                <p style={{ fontSize: 13, color: C.secondary, fontWeight: 600, marginBottom: "1.25rem" }}>📈 {audience.growth_trajectory || audience.trajectory}</p>
+              )}
+              {(strengths.length > 0 || weaknesses.length > 0) && (
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(220px,1fr))", gap: "1rem" }}>
-                  {audience.strengths?.length > 0 && (
+                  {strengths.length > 0 && (
                     <div>
                       <p style={{ fontSize: 11, color: C.green, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 8 }}>Strengths</p>
-                      {audience.strengths.map((s,i) => <div key={i} style={{ fontSize: 13, color: C.muted, display: "flex", gap: 6, marginBottom: 6, alignItems: "flex-start" }}><span style={{ color: C.green, flexShrink: 0, fontWeight: 700 }}>✓</span>{s}</div>)}
+                      {strengths.map((s,i) => <div key={i} style={{ fontSize: 13, color: C.muted, display: "flex", gap: 6, marginBottom: 6, alignItems: "flex-start" }}><span style={{ color: C.green, flexShrink: 0, fontWeight: 700 }}>✓</span>{s}</div>)}
                     </div>
                   )}
-                  {audience.weaknesses?.length > 0 && (
+                  {weaknesses.length > 0 && (
                     <div>
                       <p style={{ fontSize: 11, color: C.accent, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 8 }}>Weaknesses</p>
-                      {audience.weaknesses.map((w,i) => <div key={i} style={{ fontSize: 13, color: C.muted, display: "flex", gap: 6, marginBottom: 6, alignItems: "flex-start" }}><span style={{ color: C.accent, flexShrink: 0, fontWeight: 700 }}>✗</span>{w}</div>)}
+                      {weaknesses.map((w,i) => <div key={i} style={{ fontSize: 13, color: C.muted, display: "flex", gap: 6, marginBottom: 6, alignItems: "flex-start" }}><span style={{ color: C.accent, flexShrink: 0, fontWeight: 700 }}>✗</span>{w}</div>)}
                     </div>
                   )}
                 </div>
@@ -712,7 +454,7 @@ const audience =
           </section>
         )}
 
-        {/* ── Content Gaps ── */}
+        {/* Content Gaps */}
         {gaps.length > 0 && (
           <section style={{ marginBottom: "1.5rem" }}>
             <SectionLabel icon="🔍" label="Content Gaps & Opportunities" />
@@ -721,20 +463,16 @@ const audience =
                 <GlassCard key={i} style={{ borderLeft: `3px solid ${C.accent}` }}>
                   <div style={{ display: "flex", gap: 8, alignItems: "flex-start", marginBottom: 6 }}>
                     <span>🎯</span>
-                    <span style={{ fontSize: 13, fontWeight: 700, color: C.accent }}>
-                      {g.gap || g.title || g.missing_content || (typeof g === "string" ? g : "Gap")}
-                    </span>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: C.accent }}>{g.gap || g.title || g.missing_content}</span>
                   </div>
-                  <p style={{ fontSize: 13, color: C.muted, lineHeight: 1.6 }}>
-                    {g.opportunity || g.description || g.growth_opportunity || (typeof g === "string" ? "" : "")}
-                  </p>
+                  <p style={{ fontSize: 13, color: C.muted, lineHeight: 1.6 }}>{g.opportunity || g.description || g.growth_opportunity}</p>
                 </GlassCard>
               ))}
             </div>
           </section>
         )}
 
-        {/* ── Recommendations ── */}
+        {/* Recommendations */}
         {recs.length > 0 && (
           <section style={{ marginBottom: "1.5rem" }}>
             <SectionLabel icon="💡" label="AI Recommendations" />
@@ -743,15 +481,9 @@ const audience =
                 <GlassCard key={i} style={{ display: "flex", gap: "1rem", alignItems: "flex-start" }}>
                   <div style={{ width: 34, height: 34, borderRadius: 10, background: "linear-gradient(135deg,#5B8CFF,#7B61FF)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 700, flexShrink: 0, boxShadow: "0 4px 12px rgba(91,140,255,0.3)" }}>{i+1}</div>
                   <div style={{ flex: 1 }}>
-                    {typeof r === "string" ? (
-                      <p style={{ fontSize: 14, lineHeight: 1.7, margin: 0 }}>{r}</p>
-                    ) : (
-                      <>
-                        {(r.title || r.recommendation) && <h4 style={{ fontSize: 15, fontWeight: 700, marginBottom: 5 }}>{r.title || r.recommendation}</h4>}
-                        {r.description && <p style={{ fontSize: 13, color: C.muted, lineHeight: 1.65, marginBottom: r.expected_impact || r.impact ? 8 : 0 }}>{r.description}</p>}
-                        {(r.expected_impact || r.impact) && <span style={{ fontSize: 12, color: C.secondary, fontWeight: 600 }}>📈 Expected: {r.expected_impact || r.impact}</span>}
-                      </>
-                    )}
+                    <h4 style={{ fontSize: 15, fontWeight: 700, marginBottom: 5 }}>{r.title || r.recommendation}</h4>
+                    <p style={{ fontSize: 13, color: C.muted, lineHeight: 1.65, marginBottom: 8 }}>{r.description || r.details}</p>
+                    {(r.impact || r.expected_impact) && <span style={{ fontSize: 12, color: C.secondary, fontWeight: 600 }}>📈 Expected: {r.impact || r.expected_impact}</span>}
                   </div>
                 </GlassCard>
               ))}
@@ -759,7 +491,7 @@ const audience =
           </section>
         )}
 
-        {/* ── Export ── */}
+        {/* Export */}
         <section>
           <GlassCard style={{ textAlign: "center", background: "linear-gradient(135deg,rgba(91,140,255,0.07),rgba(255,79,163,0.05))", border: "1px solid rgba(91,140,255,0.18)" }}>
             <div style={{ fontSize: 40, marginBottom: "0.75rem" }}>✨</div>
@@ -791,7 +523,10 @@ export default function App() {
     setErrorMsg("");
 
     try {
-      const webhookUrl = "https://okrishit.app.n8n.cloud/webhook/instagram-analyzer";
+      const webhookUrl =
+  import.meta.env.VITE_N8N_WEBHOOK_URL ||
+  "https://okrishit.app.n8n.cloud/webhook/instagram-analyzer";
+  if (!webhookUrl) throw new Error("VITE_N8N_WEBHOOK_URL is not set. In your Vite project, ensure it's in your .env file. For local testing, set window.VITE_N8N_WEBHOOK_URL in your browser console.");
 
       const response = await fetch(webhookUrl, {
         method: "POST",
@@ -803,26 +538,25 @@ export default function App() {
 
       const raw = await response.json();
 
+      // Handle multiple possible response shapes from n8n
       let report = null;
-      const first = Array.isArray(raw) ? raw[0] : raw;
 
-      if (first?.report && typeof first.report === "object") {
-        report = first.report;
-        if (report.profile_overview && !report.profile_overview.username) {
-          report.profile_overview.username = first.username || uname;
+      if (Array.isArray(raw)) {
+        // e.g. [{ analysis: "..." }] or [{ ...reportFields }]
+        const first = raw[0];
+        if (first?.analysis) {
+          report = typeof first.analysis === "string" ? JSON.parse(first.analysis) : first.analysis;
+        } else {
+          report = first;
         }
-      } else if (first?.analysis) {
-        report = typeof first.analysis === "string" ? JSON.parse(first.analysis) : first.analysis;
+      } else if (raw?.analysis) {
+        report = typeof raw.analysis === "string" ? JSON.parse(raw.analysis) : raw.analysis;
       } else {
-        report = first;
+        // Assume the root object IS the report
+        report = raw;
       }
 
       if (!report || typeof report !== "object") throw new Error("Unexpected response format from n8n. Could not parse report.");
-
-      // FIX: log broken engagement for debugging
-      if (report.engagement_analysis && Array.isArray(report.engagement_analysis.messages)) {
-        console.warn("[Instagram Analyzer] engagement_analysis contains raw LLM request — n8n is not parsing the LLM response. Fix the workflow to extract the AI output.");
-      }
 
       setResults(report);
       setPhase("results");
