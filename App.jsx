@@ -158,13 +158,12 @@ function HeroPage({ onAnalyze }) {
   );
 }
 
-/* ── helpers to safely extract strings from possibly-object fields ── */
+/* ── helpers ── */
 function strVal(v) {
   if (v == null) return null;
   if (typeof v === "string") return v;
   if (typeof v === "number") return String(v);
   if (typeof v === "object") {
-    // e.g. audience_type: { primary: "Tech Enthusiasts", ... }
     return v.primary || v.name || v.label || Object.values(v).filter(x => typeof x === "string")[0] || null;
   }
   return null;
@@ -176,52 +175,78 @@ function arrVal(v) {
   return [];
 }
 
+/**
+ * FIX: Format engagement rate properly.
+ * n8n returns 0.004 (decimal) but we want to show "0.40%" not "0.004%"
+ * If value > 1 assume it's already a percentage. If ≤ 1, multiply by 100.
+ */
+function fmtEngRate(v) {
+  if (v == null) return null;
+  if (typeof v === "string") return v.includes("%") ? v : v;
+  if (typeof v === "number") {
+    const pct = v <= 1 ? (v * 100).toFixed(2) : v.toFixed(2);
+    return `${pct}%`;
+  }
+  return String(v);
+}
+
+/**
+ * FIX: Detect if engagement_analysis is a malformed LLM-request payload
+ * (has model/messages keys instead of actual results).
+ */
+function isEngagementBroken(eng) {
+  if (!eng || typeof eng !== "object") return true;
+  // If it has "messages" array (LLM request leaked), it's broken
+  return Array.isArray(eng.messages) || ("model" in eng && "temperature" in eng);
+}
+
 /* ── DASHBOARD ── */
 function Dashboard({ username, data: raw, onReset }) {
   const fmtColors = [["#5B8CFF","#7B61FF"],["#10B981","#059669"],["#F59E0B","#D97706"],["#FF4FA3","#FF6B35"]];
 
-  // ── normalise the report object regardless of nesting ──
-  // n8n returns: { username, report: { profile_overview, ... } }  OR flat
   const d = (raw.report && typeof raw.report === "object") ? raw.report : raw;
 
-  // ── section extraction with all known key variants ──
-  const profile   = d.profile_overview   || d.profile   || {};
-  const niche     = d.niche_detection    || d.niche      || {};
-  // posting_analysis OR posting_frequency (your workflow uses posting_frequency as a section key)
-  const posting   = d.posting_analysis   || d.posting    || (typeof d.posting_frequency === "object" ? d.posting_frequency : {});
-  const content   = d.content_analysis   || d.content    || {};
-  const engagement= d.engagement_analysis|| d.engagement || {};
-  const topPosts  = Array.isArray(d.top_posts)   ? d.top_posts
-                  : Array.isArray(d.topPosts)     ? d.topPosts
-                  : Array.isArray(d.top_performing_content) ? [] // object not array
-                  : [];
-  const audience  = d.audience_insights  || d.audience   || {};
-  
-  // content_gaps: your workflow returns { underutilized_formats:[], missing_topics:[] } OR array
+  const profile    = d.profile_overview   || d.profile   || {};
+  const niche      = d.niche_detection    || d.niche      || {};
+  const posting    = d.posting_analysis   || d.posting    || (typeof d.posting_frequency === "object" ? d.posting_frequency : {});
+  const content    = d.content_analysis   || d.content    || {};
+  const rawEng     = d.engagement_analysis|| d.engagement || {};
+  const topPosts   = Array.isArray(d.top_posts)   ? d.top_posts
+                   : Array.isArray(d.topPosts)     ? d.topPosts : [];
+  const audience   = d.audience_insights  || d.audience   || {};
+
+  // ── FIX: fall back to audience_insights when engagement_analysis is broken ──
+  const engBroken = isEngagementBroken(rawEng);
+  const engagement = engBroken ? {} : rawEng;
+
+  // Pull engagement numbers — prefer engagement_analysis, fallback to audience_insights
+  const engRate     = engagement.engagement_rate   ?? audience.engagement_rate;
+  const avgLikes    = engagement.average_likes     ?? engagement.avgLikes    ?? audience.average_likes_per_post;
+  const avgComments = engagement.average_comments  ?? engagement.avgComments ?? audience.average_comments_per_post;
+  const sentiment   = strVal(engagement.overall_sentiment || engagement.sentiment || engagement.engagement_quality);
+  const perfSummary = engagement.performance_summary || null;
+  const sentimentBreakdown = engagement.sentiment_breakdown || engagement.sentimentBreakdown || {};
+
+  // content_gaps
   let gaps = [];
   if (Array.isArray(d.content_gaps)) {
     gaps = d.content_gaps;
   } else if (d.content_gaps && typeof d.content_gaps === "object") {
-    // convert object shape → array of gap cards
     const cg = d.content_gaps;
     if (cg.underutilized_formats) cg.underutilized_formats.forEach(f => gaps.push({ gap: "Underutilized Format", opportunity: f }));
     if (cg.missing_topics)        cg.missing_topics.forEach(t => gaps.push({ gap: "Missing Topic", opportunity: t }));
   }
 
-  // recommendations: array of strings OR array of objects
   const recs = Array.isArray(d.recommendations) ? d.recommendations : [];
 
-  // ── posting sub-fields ──
-  // workflow key: posting_frequency (string), consistency_score, best_posting_times
-  const postingFreq   = strVal(posting.posting_frequency || posting.frequency || (typeof d.posting_frequency === "string" ? d.posting_frequency : null));
-  const consistScore  = posting.consistency_score || posting.consistencyScore;
-  const bestTimes     = arrVal(posting.best_posting_times || posting.best_times || posting.bestTimes);
+  // posting sub-fields
+  const postingFreq  = strVal(posting.posting_frequency || posting.frequency || (typeof d.posting_frequency === "string" ? d.posting_frequency : null));
+  const consistScore = posting.consistency_score || posting.consistencyScore;
+  const bestTimes    = arrVal(posting.best_posting_times || posting.best_times || posting.bestTimes);
 
-  // ── content sub-fields ──
-  const themes        = arrVal(content.themes || content.content_themes);
-  // format_breakdown OR content_mix (your workflow uses content_mix: {images,videos,carousels})
-  const rawFmt        = content.format_breakdown || content.formatBreakdown || posting.content_mix || {};
-  // normalise content_mix numbers to labelled object
+  // content sub-fields
+  const themes = arrVal(content.themes || content.content_themes);
+  const rawFmt = content.format_breakdown || content.formatBreakdown || posting.content_mix || {};
   const formatBreakdown = {};
   if (rawFmt) {
     Object.entries(rawFmt).forEach(([k, v]) => {
@@ -229,26 +254,24 @@ function Dashboard({ username, data: raw, onReset }) {
       formatBreakdown[label] = typeof v === "number" ? v : parseFloat(v) || 0;
     });
   }
-  // if content_mix counts (not %), convert to %
   const fmtTotal = Object.values(formatBreakdown).reduce((a,b) => a+b, 0);
   const fmtNormalised = {};
   Object.entries(formatBreakdown).forEach(([k,v]) => {
     fmtNormalised[k] = fmtTotal > 0 ? Math.round((v / fmtTotal) * 100) : v;
   });
 
-  // ── engagement sub-fields ──
-  const engRate     = engagement.engagement_rate   ?? engagement.rate;
-  const avgLikes    = engagement.average_likes     ?? engagement.avgLikes    ?? audience.average_likes_per_post;
-  const avgComments = engagement.average_comments  ?? engagement.avgComments ?? audience.average_comments_per_post;
-  const sentiment   = strVal(engagement.overall_sentiment || engagement.sentiment || engagement.engagement_quality);
-  const sentimentBreakdown = engagement.sentiment_breakdown || engagement.sentimentBreakdown || {};
+  // audience sub-fields
+  // FIX: audience_type is an object {primary, secondary, tertiary} — render all tiers
+  const audienceTypeObj = audience.audience_type || audience.type || null;
+  const audienceTypeStr = strVal(audienceTypeObj);
+  const audienceTypeTiers = (audienceTypeObj && typeof audienceTypeObj === "object" && !Array.isArray(audienceTypeObj))
+    ? Object.entries(audienceTypeObj).filter(([,v]) => typeof v === "string")
+    : null;
 
-  // ── audience sub-fields ──
-  const audienceType  = strVal(audience.audience_type  || audience.type || (audience.primary_audience ? { primary: audience.primary_audience } : null));
-  const growthTraj    = strVal(audience.growth_trajectory || audience.trajectory);
-  const strengths     = arrVal(audience.strengths || profile.strengths);
-  const weaknesses    = arrVal(audience.weaknesses);
-  const audienceInts  = arrVal(audience.audience_interests || audience.interests || (audience.audience_type?.tertiary ? [audience.audience_type.tertiary] : []));
+  const growthTraj  = strVal(audience.growth_trajectory || audience.trajectory);
+  const strengths   = arrVal(audience.strengths || profile.strengths);
+  const weaknesses  = arrVal(audience.weaknesses);
+  const audienceInts = arrVal(audience.audience_interests || audience.interests);
 
   return (
     <div style={{ minHeight: "100vh", fontFamily: "Inter,sans-serif", color: C.text, position: "relative" }}>
@@ -319,14 +342,12 @@ function Dashboard({ username, data: raw, onReset }) {
               ))}
             </div>
 
-            {/* account summary */}
             {(profile.account_summary || profile.summary) && (
               <div style={{ background: "linear-gradient(135deg,rgba(91,140,255,0.08),rgba(123,97,255,0.06))", borderRadius: 14, padding: "1rem", border: "1px solid rgba(91,140,255,0.15)" }}>
                 <p style={{ color: "#4B5563", fontSize: 14, lineHeight: 1.65 }}>{profile.account_summary || profile.summary}</p>
               </div>
             )}
 
-            {/* profile strengths if present */}
             {strengths.length > 0 && !audience.strengths && (
               <div style={{ marginTop: "1rem" }}>
                 <p style={{ fontSize: 11, color: C.green, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 8 }}>Profile Strengths</p>
@@ -354,7 +375,6 @@ function Dashboard({ username, data: raw, onReset }) {
                     <Tag color={c}>{v}</Tag>
                   </div>
                 ))}
-                {/* secondary niches list */}
                 {Array.isArray(niche.secondary_niches) && niche.secondary_niches.length > 1 && (
                   <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
                     {niche.secondary_niches.slice(1).map((n,i) => <Tag key={i} color={C.secondary}>{n}</Tag>)}
@@ -385,7 +405,6 @@ function Dashboard({ username, data: raw, onReset }) {
                   <div style={{ fontSize: 11, color: C.muted, marginTop: 2, textTransform: "uppercase", letterSpacing: "0.06em" }}>Posting Frequency</div>
                 </div>
               )}
-              {/* average_posts_per_week fallback */}
               {posting.average_posts_per_week != null && (
                 <div style={{ background: "rgba(255,255,255,0.6)", borderRadius: 14, border: "1px solid rgba(255,255,255,0.6)", padding: "0.85rem", textAlign: "center" }}>
                   <div style={{ fontSize: "1.1rem", fontWeight: 700 }}>{posting.average_posts_per_week}× per week</div>
@@ -417,7 +436,6 @@ function Dashboard({ username, data: raw, onReset }) {
                   ))}
                 </div>
               )}
-              {/* best_posting_time_estimate (single string fallback) */}
               {posting.best_posting_time_estimate && bestTimes.length === 0 && (
                 <div style={{ display: "flex", gap: 8, alignItems: "center", padding: "0.5rem 0.75rem", background: "rgba(251,188,5,0.08)", borderRadius: 10, border: "1px solid rgba(251,188,5,0.2)" }}>
                   <span style={{ color: C.yellow }}>⏰</span>
@@ -440,7 +458,6 @@ function Dashboard({ username, data: raw, onReset }) {
                 </div>
               </div>
             )}
-            {/* content_themes object fallback */}
             {content.content_themes && typeof content.content_themes === "object" && !Array.isArray(content.content_themes) && themes.length === 0 && (
               <div style={{ marginBottom: "1.25rem" }}>
                 <p style={{ fontSize: 11, color: C.muted, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8 }}>Themes</p>
@@ -463,6 +480,27 @@ function Dashboard({ username, data: raw, onReset }) {
                 ))}
               </div>
             )}
+            {/* FIX: show content_strengths and improvement_areas */}
+            {Array.isArray(content.content_strengths) && content.content_strengths.length > 0 && (
+              <div style={{ marginBottom: "1rem" }}>
+                <p style={{ fontSize: 11, color: C.green, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 8 }}>Content Strengths</p>
+                {content.content_strengths.map((s,i) => (
+                  <div key={i} style={{ fontSize: 13, color: C.muted, display: "flex", gap: 6, marginBottom: 6, alignItems: "flex-start" }}>
+                    <span style={{ color: C.green, flexShrink: 0, fontWeight: 700 }}>✓</span>{s}
+                  </div>
+                ))}
+              </div>
+            )}
+            {Array.isArray(content.improvement_areas) && content.improvement_areas.length > 0 && (
+              <div style={{ marginBottom: "1rem" }}>
+                <p style={{ fontSize: 11, color: C.yellow, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 8 }}>Improvement Areas</p>
+                {content.improvement_areas.map((s,i) => (
+                  <div key={i} style={{ fontSize: 13, color: C.muted, display: "flex", gap: 6, marginBottom: 6, alignItems: "flex-start" }}>
+                    <span style={{ color: C.yellow, flexShrink: 0, fontWeight: 700 }}>→</span>{s}
+                  </div>
+                ))}
+              </div>
+            )}
             {(content.caption_style || content.captionStyle || content.content_style) && (
               <div style={{ background: "rgba(16,185,129,0.07)", borderRadius: 12, padding: "0.8rem", border: "1px solid rgba(16,185,129,0.18)", marginBottom: 8 }}>
                 <p style={{ margin: 0, fontSize: 12, color: "#047857" }}><b>Caption Style:</b> {content.caption_style || content.captionStyle || content.content_style}</p>
@@ -473,16 +511,35 @@ function Dashboard({ username, data: raw, onReset }) {
                 <p style={{ margin: 0, fontSize: 12, color: "#1e40af" }}><b>Hashtag Strategy:</b> {content.hashtag_strategy}</p>
               </div>
             )}
+            {/* brand_voice */}
+            {content.brand_voice && (
+              <div style={{ background: "rgba(123,97,255,0.06)", borderRadius: 12, padding: "0.8rem", border: "1px solid rgba(123,97,255,0.15)", marginTop: 8 }}>
+                <p style={{ margin: 0, fontSize: 12, color: "#5b21b6" }}><b>Brand Voice:</b> {content.brand_voice}</p>
+              </div>
+            )}
           </GlassCard>
 
           <GlassCard>
             <SectionLabel icon="📊" label="Engagement Analysis" />
+
+            {/* FIX: show note if data came from audience_insights fallback */}
+            {engBroken && (avgLikes != null || engRate != null) && (
+              <div style={{ background: "rgba(245,158,11,0.08)", borderRadius: 10, padding: "0.6rem 0.85rem", border: "1px solid rgba(245,158,11,0.25)", marginBottom: "1rem", fontSize: 12, color: "#92400e" }}>
+                ℹ️ Engagement stats sourced from audience insights (LLM node output not parsed in n8n)
+              </div>
+            )}
+            {engBroken && avgLikes == null && engRate == null && (
+              <div style={{ background: "rgba(239,68,68,0.07)", borderRadius: 10, padding: "0.6rem 0.85rem", border: "1px solid rgba(239,68,68,0.2)", marginBottom: "1rem", fontSize: 12, color: "#991b1b" }}>
+                ⚠️ Engagement data unavailable — fix the LLM response parsing in your n8n workflow (see console for details)
+              </div>
+            )}
+
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem", marginBottom: "1.25rem" }}>
               {[
-                ["Eng. Rate",    engRate     != null ? (typeof engRate === "number" ? (engRate + "%") : engRate) : null, ["#5B8CFF","#7B61FF"]],
-                ["Avg Likes",    avgLikes    != null ? (typeof avgLikes === "number" ? avgLikes.toLocaleString() : avgLikes) : null, ["#FF4FA3","#FF6B35"]],
+                ["Eng. Rate",    engRate     != null ? fmtEngRate(engRate) : null,                                                            ["#5B8CFF","#7B61FF"]],
+                ["Avg Likes",    avgLikes    != null ? (typeof avgLikes === "number" ? avgLikes.toLocaleString() : avgLikes) : null,           ["#FF4FA3","#FF6B35"]],
                 ["Avg Comments", avgComments != null ? (typeof avgComments === "number" ? avgComments.toLocaleString() : avgComments) : null, ["#10B981","#059669"]],
-                ["Sentiment",    sentiment, ["#F59E0B","#D97706"]],
+                ["Sentiment",    sentiment,                                                                                                    ["#F59E0B","#D97706"]],
               ].filter(([,v]) => v != null).map(([l,v,g]) => (
                 <div key={l} style={{ background: "rgba(255,255,255,0.6)", border: "1px solid rgba(255,255,255,0.6)", borderRadius: 14, padding: "0.9rem" }}>
                   <div style={{ fontSize: 10, color: C.muted, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 4 }}>{l}</div>
@@ -490,9 +547,9 @@ function Dashboard({ username, data: raw, onReset }) {
                 </div>
               ))}
             </div>
-            {engagement.performance_summary && (
+            {perfSummary && (
               <div style={{ background: "rgba(91,140,255,0.07)", borderRadius: 12, padding: "0.8rem", border: "1px solid rgba(91,140,255,0.15)", marginBottom: "1rem" }}>
-                <p style={{ margin: 0, fontSize: 12, color: "#1e40af", lineHeight: 1.6 }}>{engagement.performance_summary}</p>
+                <p style={{ margin: 0, fontSize: 12, color: "#1e40af", lineHeight: 1.6 }}>{perfSummary}</p>
               </div>
             )}
             {Object.keys(sentimentBreakdown).length > 0 && (
@@ -510,7 +567,6 @@ function Dashboard({ username, data: raw, onReset }) {
                 </div>
               </>
             )}
-            {/* reasons array from engagement */}
             {Array.isArray(engagement.reasons) && engagement.reasons.length > 0 && (
               <div style={{ marginTop: "1rem" }}>
                 <p style={{ fontSize: 11, color: C.muted, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8 }}>Key Factors</p>
@@ -529,47 +585,64 @@ function Dashboard({ username, data: raw, onReset }) {
           <section style={{ marginBottom: "1.5rem" }}>
             <SectionLabel icon="🏆" label="Top Performing Posts" />
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(230px,1fr))", gap: "1rem" }}>
-              {topPosts.map((p,i) => (
-                <div key={i} className="glass-card" style={{ overflow: "hidden", padding: 0 }}>
-                  {(p.thumbnail_url || p.thumbnail || p.image_url || p.url) && (
-                    <div style={{ position: "relative" }}>
-                      <img
-                        src={p.thumbnail_url || p.thumbnail || p.image_url}
-                        alt=""
-                        style={{ width: "100%", height: 155, objectFit: "cover", display: "block" }}
-                        onError={e => e.target.style.display="none"}
-                      />
-                      <div style={{ position: "absolute", top: 10, left: 10, background: "linear-gradient(135deg,#5B8CFF,#7B61FF)", color: "#fff", borderRadius: 8, padding: "0.2rem 0.6rem", fontSize: 11, fontWeight: 700 }}>#{i+1}</div>
-                      {(p.type || p.media_type) && (
-                        <div style={{ position: "absolute", top: 10, right: 10, background: "rgba(0,0,0,0.5)", backdropFilter: "blur(8px)", color: "#fff", borderRadius: 8, padding: "0.2rem 0.6rem", fontSize: 10, fontWeight: 600 }}>{p.type || p.media_type}</div>
-                      )}
-                    </div>
-                  )}
-                  {/* if no image but we have a url, show rank badge only */}
-                  {!(p.thumbnail_url || p.thumbnail || p.image_url) && (
-                    <div style={{ position: "relative", background: "linear-gradient(135deg,rgba(91,140,255,0.12),rgba(123,97,255,0.08))", height: 60, display: "flex", alignItems: "center", paddingLeft: "1rem", gap: 10 }}>
-                      <div style={{ background: "linear-gradient(135deg,#5B8CFF,#7B61FF)", color: "#fff", borderRadius: 8, padding: "0.2rem 0.7rem", fontSize: 13, fontWeight: 700 }}>#{i+1}</div>
-                      {(p.type || p.media_type) && <Tag color={C.primary}>{p.type || p.media_type}</Tag>}
-                      {p.url && <a href={p.url} target="_blank" rel="noreferrer" style={{ fontSize: 11, color: C.primary, marginLeft: "auto", marginRight: "1rem" }}>View ↗</a>}
-                    </div>
-                  )}
-                  <div style={{ padding: "1rem" }}>
-                    {p.caption && (
-                      <p style={{ fontSize: 13, fontWeight: 600, marginBottom: 8, lineHeight: 1.4, display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{p.caption}</p>
-                    )}
-                    <div style={{ display: "flex", gap: 14, marginBottom: 10, flexWrap: "wrap" }}>
-                      {(p.likes ?? p.like_count) != null && <span style={{ fontSize: 12, fontWeight: 600, color: C.accent }}>❤ {typeof (p.likes ?? p.like_count) === "number" ? (p.likes ?? p.like_count).toLocaleString() : (p.likes ?? p.like_count)}</span>}
-                      {(p.comments ?? p.comment_count) != null && <span style={{ fontSize: 12, fontWeight: 600, color: C.primary }}>💬 {typeof (p.comments ?? p.comment_count) === "number" ? (p.comments ?? p.comment_count).toLocaleString() : (p.comments ?? p.comment_count)}</span>}
-                      {p.engagement_rate != null && <span style={{ fontSize: 12, fontWeight: 600, color: C.secondary }}>📊 {p.engagement_rate}</span>}
-                    </div>
-                    {(p.ai_explanation || p.reason || p.why_it_performed) && (
-                      <div style={{ background: "rgba(16,185,129,0.07)", borderRadius: 9, padding: "0.55rem 0.7rem", border: "1px solid rgba(16,185,129,0.18)" }}>
-                        <p style={{ margin: 0, fontSize: 12, color: "#047857", lineHeight: 1.5 }}>{p.ai_explanation || p.reason || p.why_it_performed}</p>
+              {topPosts.map((p,i) => {
+                const hasThumbnail = !!(p.thumbnail_url || p.thumbnail || p.image_url);
+                // FIX: pick emoji based on post type for placeholder
+                const typeEmoji = { video: "🎬", sidecar: "🖼️", carousel: "🖼️", image: "📷" }[(p.type || p.media_type || "").toLowerCase()] || "📷";
+                return (
+                  <div key={i} className="glass-card" style={{ overflow: "hidden", padding: 0 }}>
+                    {hasThumbnail ? (
+                      <div style={{ position: "relative" }}>
+                        <img
+                          src={p.thumbnail_url || p.thumbnail || p.image_url}
+                          alt=""
+                          style={{ width: "100%", height: 155, objectFit: "cover", display: "block" }}
+                          onError={e => { e.target.style.display="none"; e.target.nextSibling.style.display="flex"; }}
+                        />
+                        {/* hidden fallback shown if img errors */}
+                        <div style={{ display: "none", width: "100%", height: 155, background: "linear-gradient(135deg,rgba(91,140,255,0.12),rgba(123,97,255,0.08))", alignItems: "center", justifyContent: "center", fontSize: 40 }}>{typeEmoji}</div>
+                        <div style={{ position: "absolute", top: 10, left: 10, background: "linear-gradient(135deg,#5B8CFF,#7B61FF)", color: "#fff", borderRadius: 8, padding: "0.2rem 0.6rem", fontSize: 11, fontWeight: 700 }}>#{i+1}</div>
+                        {(p.type || p.media_type) && (
+                          <div style={{ position: "absolute", top: 10, right: 10, background: "rgba(0,0,0,0.5)", backdropFilter: "blur(8px)", color: "#fff", borderRadius: 8, padding: "0.2rem 0.6rem", fontSize: 10, fontWeight: 600 }}>{p.type || p.media_type}</div>
+                        )}
+                      </div>
+                    ) : (
+                      /* FIX: styled placeholder card when no thumbnail */
+                      <div style={{ position: "relative", background: "linear-gradient(135deg,rgba(91,140,255,0.10),rgba(123,97,255,0.07))", height: 90, display: "flex", alignItems: "center", justifyContent: "center", gap: 12, borderBottom: "1px solid rgba(91,140,255,0.1)" }}>
+                        <span style={{ fontSize: 36 }}>{typeEmoji}</span>
+                        <div>
+                          <div style={{ background: "linear-gradient(135deg,#5B8CFF,#7B61FF)", color: "#fff", borderRadius: 8, padding: "0.2rem 0.7rem", fontSize: 13, fontWeight: 700, display: "inline-block", marginBottom: 6 }}>#{i+1}</div>
+                          {(p.type || p.media_type) && (
+                            <div><Tag color={C.primary}>{p.type || p.media_type}</Tag></div>
+                          )}
+                        </div>
+                        {p.url && (
+                          <a href={p.url} target="_blank" rel="noreferrer" style={{ position: "absolute", top: 10, right: 10, fontSize: 11, color: C.primary, background: "rgba(255,255,255,0.8)", borderRadius: 8, padding: "0.2rem 0.6rem", textDecoration: "none", fontWeight: 600 }}>View ↗</a>
+                        )}
                       </div>
                     )}
+                    <div style={{ padding: "1rem" }}>
+                      {p.caption && (
+                        <p style={{ fontSize: 13, fontWeight: 600, marginBottom: 8, lineHeight: 1.4, display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{p.caption}</p>
+                      )}
+                      <div style={{ display: "flex", gap: 14, marginBottom: 10, flexWrap: "wrap" }}>
+                        {(p.likes ?? p.like_count) != null && <span style={{ fontSize: 12, fontWeight: 600, color: C.accent }}>❤ {typeof (p.likes ?? p.like_count) === "number" ? (p.likes ?? p.like_count).toLocaleString() : (p.likes ?? p.like_count)}</span>}
+                        {(p.comments ?? p.comment_count) != null && <span style={{ fontSize: 12, fontWeight: 600, color: C.primary }}>💬 {typeof (p.comments ?? p.comment_count) === "number" ? (p.comments ?? p.comment_count).toLocaleString() : (p.comments ?? p.comment_count)}</span>}
+                        {p.engagement_rate != null && <span style={{ fontSize: 12, fontWeight: 600, color: C.secondary }}>📊 {fmtEngRate(p.engagement_rate)}</span>}
+                      </div>
+                      {/* FIX: show URL as a link if no thumbnail */}
+                      {!hasThumbnail && p.url && (
+                        <a href={p.url} target="_blank" rel="noreferrer" style={{ display: "inline-block", fontSize: 12, color: C.primary, marginBottom: 8, fontWeight: 600, textDecoration: "none" }}>🔗 View on Instagram ↗</a>
+                      )}
+                      {(p.ai_explanation || p.reason || p.why_it_performed) && (
+                        <div style={{ background: "rgba(16,185,129,0.07)", borderRadius: 9, padding: "0.55rem 0.7rem", border: "1px solid rgba(16,185,129,0.18)" }}>
+                          <p style={{ margin: 0, fontSize: 12, color: "#047857", lineHeight: 1.5 }}>{p.ai_explanation || p.reason || p.why_it_performed}</p>
+                        </div>
+                      )}
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </section>
         )}
@@ -579,16 +652,30 @@ function Dashboard({ username, data: raw, onReset }) {
           <section style={{ marginBottom: "1.5rem" }}>
             <SectionLabel icon="👥" label="Audience Insights" />
             <GlassCard>
-              {audienceType && (
+              {/* FIX: render multi-tier audience_type object properly */}
+              {audienceTypeTiers ? (
                 <div style={{ background: "linear-gradient(135deg,rgba(91,140,255,0.07),rgba(123,97,255,0.05))", borderRadius: 14, padding: "1rem", border: "1px solid rgba(91,140,255,0.15)", marginBottom: "1.25rem" }}>
-                  <p style={{ color: "#374151", fontSize: 14, fontWeight: 500 }}>{audienceType}</p>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
+                    {audienceTypeTiers.map(([tier, val], i) => (
+                      <div key={tier} style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                        <span style={{ fontSize: 11, color: C.muted, textTransform: "capitalize" }}>{tier}:</span>
+                        <Tag color={[C.primary, C.secondary, C.accent][i] || C.primary}>{val}</Tag>
+                      </div>
+                    ))}
+                  </div>
+                  {audience.age_group_estimate && <p style={{ color: C.muted, fontSize: 13, marginTop: 8 }}>Age group: {audience.age_group_estimate}</p>}
+                </div>
+              ) : audienceTypeStr ? (
+                <div style={{ background: "linear-gradient(135deg,rgba(91,140,255,0.07),rgba(123,97,255,0.05))", borderRadius: 14, padding: "1rem", border: "1px solid rgba(91,140,255,0.15)", marginBottom: "1.25rem" }}>
+                  <p style={{ color: "#374151", fontSize: 14, fontWeight: 500 }}>{audienceTypeStr}</p>
                   {audience.age_group_estimate && <p style={{ color: C.muted, fontSize: 13, marginTop: 4 }}>Age group: {audience.age_group_estimate}</p>}
                 </div>
-              )}
+              ) : null}
+
               {growthTraj && (
                 <p style={{ fontSize: 13, color: C.secondary, fontWeight: 600, marginBottom: "1.25rem" }}>📈 {growthTraj}</p>
               )}
-              {/* audience interests */}
+
               {audienceInts.length > 0 && (
                 <div style={{ marginBottom: "1.25rem" }}>
                   <p style={{ fontSize: 11, color: C.muted, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8 }}>Interests</p>
@@ -597,6 +684,7 @@ function Dashboard({ username, data: raw, onReset }) {
                   </div>
                 </div>
               )}
+
               {(audience.strengths?.length > 0 || audience.weaknesses?.length > 0) && (
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(220px,1fr))", gap: "1rem" }}>
                   {audience.strengths?.length > 0 && (
@@ -708,31 +796,26 @@ export default function App() {
 
       const raw = await response.json();
 
-      // ── Handle all possible response shapes ──
-      // Shape A: [ { username, report: {...} } ]   ← your current n8n output
-      // Shape B: { username, report: {...} }
-      // Shape C: { analysis: "JSON string" }
-      // Shape D: flat report object
       let report = null;
-
       const first = Array.isArray(raw) ? raw[0] : raw;
 
       if (first?.report && typeof first.report === "object") {
-        // Shape A / B — report is already parsed object
         report = first.report;
-        // keep username from wrapper if profile_overview missing it
         if (report.profile_overview && !report.profile_overview.username) {
           report.profile_overview.username = first.username || uname;
         }
       } else if (first?.analysis) {
-        // Shape C — analysis is a JSON string
         report = typeof first.analysis === "string" ? JSON.parse(first.analysis) : first.analysis;
       } else {
-        // Shape D — root IS the report
         report = first;
       }
 
       if (!report || typeof report !== "object") throw new Error("Unexpected response format from n8n. Could not parse report.");
+
+      // FIX: log broken engagement for debugging
+      if (report.engagement_analysis && Array.isArray(report.engagement_analysis.messages)) {
+        console.warn("[Instagram Analyzer] engagement_analysis contains raw LLM request — n8n is not parsing the LLM response. Fix the workflow to extract the AI output.");
+      }
 
       setResults(report);
       setPhase("results");
