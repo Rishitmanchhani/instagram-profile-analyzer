@@ -213,8 +213,11 @@ function Dashboard({ username, data: raw, onReset }) {
   const rawEng     = d.engagement_analysis|| d.engagement || {};
   const topPosts   = Array.isArray(d.top_posts)   ? d.top_posts
                    : Array.isArray(d.topPosts)     ? d.topPosts : [];
-  const audience   = d.audience_insights  || d.audience   || {};
+  const audienceRaw = d.audience_insights || d.audience || {};
 
+const audience =
+  audienceRaw.audience_insights ||
+  audienceRaw;
   // ── FIX: fall back to audience_insights when engagement_analysis is broken ──
   const engBroken = isEngagementBroken(rawEng);
   const engagement = engBroken ? {} : rawEng;
