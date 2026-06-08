@@ -478,14 +478,31 @@ function Dashboard({ username, data: d, onReset }) {
             <SectionLabel icon="💡" label="AI Recommendations" />
             <div style={{ display: "flex", flexDirection: "column", gap: "0.85rem" }}>
               {recs.map((r,i) => (
-                <GlassCard key={i} style={{ display: "flex", gap: "1rem", alignItems: "flex-start" }}>
-                  <div style={{ width: 34, height: 34, borderRadius: 10, background: "linear-gradient(135deg,#5B8CFF,#7B61FF)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 700, flexShrink: 0, boxShadow: "0 4px 12px rgba(91,140,255,0.3)" }}>{i+1}</div>
-                  <div style={{ flex: 1 }}>
-                    <h4 style={{ fontSize: 15, fontWeight: 700, marginBottom: 5 }}>{r.title || r.recommendation}</h4>
-                    <p style={{ fontSize: 13, color: C.muted, lineHeight: 1.65, marginBottom: 8 }}>{r.description || r.details}</p>
-                    {(r.impact || r.expected_impact) && <span style={{ fontSize: 12, color: C.secondary, fontWeight: 600 }}>📈 Expected: {r.impact || r.expected_impact}</span>}
-                  </div>
-                </GlassCard>
+  <GlassCard key={i}>
+    <div>{i+1}</div>
+
+    <div>
+      <h4>
+        {typeof r === "string"
+          ? r
+          : (r.title || r.recommendation)}
+      </h4>
+
+      {typeof r !== "string" && (
+        <p>
+          {r.description || r.details}
+        </p>
+      )}
+
+      {typeof r !== "string" &&
+        (r.impact || r.expected_impact) && (
+          <span>
+            📈 Expected: {r.impact || r.expected_impact}
+          </span>
+      )}
+    </div>
+  </GlassCard>
+
               ))}
             </div>
           </section>
